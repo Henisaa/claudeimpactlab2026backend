@@ -1,0 +1,140 @@
+/**
+ * Motor de reglas — port 1:1 de src/lib/motor.ts del frontend.
+ *
+ * Invariante del proyecto: el nivel de alerta lo decide este archivo, a partir
+ * de la matriz clínica (data/matriz-etc.json, exportada desde el frontend con
+ * `npm run matriz`). Claude no participa en la decisión.
+ *
+ * Una regla solo se evalúa si ella y su señal están `vigente` y con `fuente`.
+ * Lo que no cumple eso se devuelve en `reglasBloqueadas`, visible, no ignorado.
+ */
+
+import { readFileSync } from "node:fs";
+import { RUTA_MATRIZ } from "./db.js";
+
+let matrizCache = null;
+
+export function matriz() {
+  if (!matrizCache) {
+    matrizCache = JSON.parse(readFileSync(RUTA_MATRIZ, "utf8"));
+  }
+  return matrizCache;
+}
+
+/** Días transcurridos desde el alta. D+0 es el día del alta. */
+export function diaRelativo(fechaAlta, hoy = new Date()) {
+  const alta = new Date(`${fechaAlta}T00:00:00`);
+  const dia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  return Math.floor((dia.getTime() - alta.getTime()) / 86_400_000);
+}
+
+const dentroDeVentana = (dia, [desde, hasta]) => dia >= desde && dia <= hasta;
+
+export function preguntasDelDia(m, dia) {
+  return m.preguntas.filter(
+    (p) => !p.ventanaDias || dentroDeVentana(dia, p.ventanaDias),
+  );
+}
+
+const PRIORIDAD = { verde: 0, amarillo: 1, rojo: 2 };
+
+export function evaluar(m, respuestas, dia) {
+  const alertas = [];
+  const reglasBloqueadas = [];
+
+  for (const regla of m.reglas) {
+    const senal = m.senalesAlarma.find((s) => s.id === regla.senalAlarmaId);
+
+    if (!senal) {
+      reglasBloqueadas.push({
+        reglaId: regla.id,
+        motivo: `La señal de alarma "${regla.senalAlarmaId}" no existe en la matriz.`,
+      });
+      continue;
+    }
+    if (regla.estado !== "vigente" || !regla.fuente) {
+      reglasBloqueadas.push({
+        reglaId: regla.id,
+        motivo: "La regla no tiene fuente clínica verificada.",
+      });
+      continue;
+    }
+    if (senal.estado !== "vigente" || !senal.fuente) {
+      reglasBloqueadas.push({
+        reglaId: regla.id,
+        motivo: `La señal "${senal.id}" no tiene fuente clínica verificada.`,
+      });
+      continue;
+    }
+
+    const respuesta = respuestas[regla.preguntaId];
+    if (respuesta === undefined) continue;
+    if (!regla.cuandoRespuestaEs.includes(respuesta)) continue;
+
+    const pregunta = m.preguntas.find((p) => p.id === regla.preguntaId);
+    alertas.push({
+      reglaId: regla.id,
+      senal,
+      preguntaTexto: pregunta?.texto ?? regla.preguntaId,
+      respuestaDada:
+        pregunta?.opciones.find((o) => o.valor === respuesta)?.etiqueta ??
+        respuesta,
+    });
+  }
+
+  const color = alertas.reduce(
+    (peor, a) => (PRIORIDAD[a.senal.color] > PRIORIDAD[peor] ? a.senal.color : peor),
+    "verde",
+  );
+
+  const escalamiento =
+    color === "verde"
+      ? null
+      : (m.escalamiento.find((e) => e.color === color) ?? null);
+
+  return {
+    diaRelativo: dia,
+    color,
+    alertas,
+    normalizaciones: normalizacionesDelDia(m, dia),
+    hitosProximos: hitosProximos(m, dia),
+    reglasBloqueadas,
+    escalamiento,
+  };
+}
+
+export function normalizacionesDelDia(m, dia) {
+  return m.sintomasEsperados.filter(
+    (s) => s.estado === "vigente" && s.fuente && dentroDeVentana(dia, s.ventanaDias),
+  );
+}
+
+export function hitosProximos(m, dia, horizonte = 7) {
+  return m.hitos
+    .filter((h) => h.diaRelativo !== null)
+    .filter((h) => h.diaRelativo >= dia && h.diaRelativo <= dia + horizonte)
+    .sort((a, b) => a.diaRelativo - b.diaRelativo);
+}
+
+export function huecosDeLaMatriz(m) {
+  const huecos = [];
+  if (!m.validadoPor) {
+    huecos.push("La matriz completa está pendiente de validación profesional.");
+  }
+  for (const h of m.hitos) {
+    if (h.estado !== "vigente" || h.diaRelativo === null || !h.fuente) {
+      huecos.push(`Hito sin fuente o sin día definido: ${h.titulo}`);
+    }
+  }
+  for (const s of m.senalesAlarma) {
+    if (s.estado !== "vigente" || !s.fuente) {
+      huecos.push(`Señal de alarma sin fuente verificada: ${s.descripcion}`);
+    }
+  }
+  for (const e of m.escalamiento) {
+    if (e.estado !== "vigente" || !e.responsable) {
+      huecos.push(`Escalamiento ${e.color} sin responsable definido.`);
+    }
+  }
+  return huecos;
+}

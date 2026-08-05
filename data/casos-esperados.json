@@ -1,0 +1,42 @@
+[
+  {
+    "caso": "SYN-ETC-0001",
+    "descripcion": "Recuperación sin complicaciones",
+    "resultadoEsperado": "Seguimiento completo, sin alertas rojas"
+  },
+  {
+    "caso": "SYN-ETC-0002",
+    "descripcion": "Dolor que mejora progresivamente",
+    "resultadoEsperado": "Alertas verdes, control normal"
+  },
+  {
+    "caso": "SYN-ETC-0003",
+    "descripcion": "Confusión con medicamentos",
+    "resultadoEsperado": "Alerta amarilla, revisión profesional (bloqueada hasta validar matriz)"
+  },
+  {
+    "caso": "SYN-ETC-0004",
+    "descripcion": "Alteración de la herida",
+    "resultadoEsperado": "Alerta amarilla, posible escalamiento (bloqueada hasta validar matriz)"
+  },
+  {
+    "caso": "SYN-ETC-0005",
+    "descripcion": "Sangrado",
+    "resultadoEsperado": "Alerta roja, derivación urgente"
+  },
+  {
+    "caso": "SYN-ETC-0006",
+    "descripcion": "Paciente que no responde",
+    "resultadoEsperado": "Escalamiento a cuidador y establecimiento"
+  },
+  {
+    "caso": "SYN-ETC-0007",
+    "descripcion": "Persona mayor con cuidador",
+    "resultadoEsperado": "Acceso compartido, confirmación de comprensión"
+  },
+  {
+    "caso": "SYN-ETC-0008",
+    "descripcion": "Derivación urgente",
+    "resultadoEsperado": "Alerta roja, intervención profesional"
+  }
+]

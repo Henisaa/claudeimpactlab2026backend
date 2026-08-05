@@ -1,0 +1,359 @@
+{
+  "id": "ETC-v0",
+  "cirugia": "Endoprótesis total de cadera primaria, electiva, unilateral",
+  "cie10": "M16",
+  "poblacion": "Personas de 65 años y más",
+  "ventanaSeguimientoDias": 90,
+  "validadoPor": null,
+  "fechaValidacion": null,
+  "hitos": [
+    {
+      "id": "contacto_24h",
+      "diaRelativo": 1,
+      "titulo": "Llamado de seguimiento",
+      "descripcion": "Contacto telefónico de seguimiento a las 24 horas del postoperatorio, según el modelo CPO-24 de Salud Responde.",
+      "fuente": {
+        "institucion": "Salud Responde — MINSAL",
+        "url": "https://saludresponde.minsal.cl/contacto-pacientes-post-operados-cpo-24/",
+        "fechaConsulta": "2026-08-05"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "control_traumatologico",
+      "diaRelativo": null,
+      "titulo": "Control con el traumatólogo",
+      "descripcion": "Control traumatológico posterior al alta. El día exacto depende del protocolo del establecimiento.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "retiro_puntos",
+      "diaRelativo": null,
+      "titulo": "Retiro de puntos o corchetes",
+      "descripcion": "Retiro de material de sutura de la herida operatoria.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "inicio_kinesiologia",
+      "diaRelativo": null,
+      "titulo": "Inicio de kinesiología",
+      "descripcion": "La guía indica que la rehabilitación continúa después del alta, pero no fija el día de inicio.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "termino_tromboprofilaxis",
+      "diaRelativo": null,
+      "titulo": "Término de la tromboprofilaxis",
+      "descripcion": "La duración la escribe el profesional en la receta. El sistema no la calcula.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "control_funcional_90",
+      "diaRelativo": null,
+      "titulo": "Control funcional",
+      "descripcion": "El seguimiento funcional de tres meses proviene de un enlace de la guía que respondió HTTP 403 y no pudo verificarse. Pendiente de confirmación.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    }
+  ],
+  "sintomasEsperados": [
+    {
+      "id": "dolor_en_manejo",
+      "ventanaDias": [
+        0,
+        90
+      ],
+      "descripcion": "El manejo del dolor forma parte activa de la recuperación postoperatoria.",
+      "mensajeNormalizador": "Sentir dolor después de esta operación es parte del proceso, y por eso se maneja con los medicamentos que le indicaron. Lo importante es que no aumente de golpe.",
+      "fuente": {
+        "institucion": "MINSAL",
+        "url": "https://www.minsal.cl/wp-content/uploads/2024/01/2023.10.25_OT-PROCESO-QUIRURGICOf61123.pdf",
+        "fechaConsulta": "2026-08-05",
+        "version": "Orientación Técnica Proceso Quirúrgico, 2023"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "nauseas_vigiladas",
+      "ventanaDias": [
+        0,
+        90
+      ],
+      "descripcion": "La vigilancia de náuseas forma parte de la recuperación postoperatoria.",
+      "mensajeNormalizador": "Las náuseas pueden aparecer después de una operación. Se vigilan, y si se mantienen conviene comentarlo en el próximo control.",
+      "fuente": {
+        "institucion": "MINSAL",
+        "url": "https://www.minsal.cl/wp-content/uploads/2024/01/2023.10.25_OT-PROCESO-QUIRURGICOf61123.pdf",
+        "fechaConsulta": "2026-08-05",
+        "version": "Orientación Técnica Proceso Quirúrgico, 2023"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "retorno_progresivo",
+      "ventanaDias": [
+        0,
+        90
+      ],
+      "descripcion": "El retorno a la actividad física y a las actividades normales es progresivo.",
+      "mensajeNormalizador": "Volver a moverse toma tiempo y es progresivo. Avanzar de a poco es lo esperado; no se trata de apurarse.",
+      "fuente": {
+        "institucion": "MINSAL",
+        "url": "https://www.minsal.cl/wp-content/uploads/2024/01/2023.10.25_OT-PROCESO-QUIRURGICOf61123.pdf",
+        "fechaConsulta": "2026-08-05",
+        "version": "Orientación Técnica Proceso Quirúrgico, 2023"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "rehabilitacion_continua",
+      "ventanaDias": [
+        0,
+        90
+      ],
+      "descripcion": "La rehabilitación coordinada y la recuperación de la movilidad forman parte del manejo posterior a la cirugía.",
+      "mensajeNormalizador": "La kinesiología es parte del tratamiento, no un extra. Mantenerla es lo que más ayuda a recuperar la marcha.",
+      "fuente": {
+        "institucion": "DIPRECE — MINSAL",
+        "url": "https://diprece.minsal.cl/garantias-explicitas-en-salud-auge-o-ges/endoprotesis-total-de-cadera-en-personas-de-65-anos-y-mas-con-artrosis-de-cadera-con-limitacion-funcional-severa/recomendaciones-grade/",
+        "fechaConsulta": "2026-08-05",
+        "version": "Recomendaciones GRADE (guía viva)"
+      },
+      "estado": "vigente"
+    }
+  ],
+  "senalesAlarma": [
+    {
+      "id": "urgencia_general",
+      "color": "rojo",
+      "descripcion": "Situación de gravedad general: pérdida de conciencia, dificultad para respirar, sangrado abundante o dolor intenso en el pecho.",
+      "accion": "Buscar atención de urgencia de inmediato. No esperar al próximo control.",
+      "fuente": {
+        "institucion": "MINSAL",
+        "url": "https://www.minsal.cl/servicios-de-urgencia-cuando-asistir-a-un-recinto-de-atencion-primaria-o-a-un-hospital/",
+        "fechaConsulta": "2026-08-05"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "sospecha_luxacion",
+      "color": "rojo",
+      "descripcion": "Sospecha de luxación de la prótesis: dolor súbito intenso, deformidad o incapacidad de apoyar la pierna.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "infeccion_sitio_quirurgico",
+      "color": "amarillo",
+      "descripcion": "Signos de infección en la herida operatoria: enrojecimiento creciente, secreción o fiebre.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "sangrado_tromboprofilaxis",
+      "color": "amarillo",
+      "descripcion": "Sangrado inusual asociado al medicamento anticoagulante indicado al alta.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "evento_tromboembolico",
+      "color": "rojo",
+      "descripcion": "Sospecha de evento tromboembólico.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "delirio_postoperatorio",
+      "color": "amarillo",
+      "descripcion": "Confusión o desorientación nueva. La vigilancia del delirio está descrita en la Orientación Técnica, pero el umbral de derivación no.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "caida",
+      "color": "amarillo",
+      "descripcion": "Caída posterior al alta.",
+      "accion": "Pendiente de definición profesional.",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    }
+  ],
+  "preguntas": [
+    {
+      "id": "emergencia",
+      "texto": "¿Está pasando alguna de estas cosas ahora? Dificultad para respirar, desmayo, sangrado abundante o dolor fuerte en el pecho.",
+      "tipo": "si_no",
+      "opciones": [
+        {
+          "valor": "no",
+          "etiqueta": "No, ninguna"
+        },
+        {
+          "valor": "si",
+          "etiqueta": "Sí, alguna de esas"
+        }
+      ]
+    },
+    {
+      "id": "dolor",
+      "texto": "¿Cómo está su dolor hoy, comparado con ayer?",
+      "tipo": "opciones",
+      "opciones": [
+        {
+          "valor": "mejor",
+          "etiqueta": "Mejor que ayer"
+        },
+        {
+          "valor": "igual",
+          "etiqueta": "Igual que ayer"
+        },
+        {
+          "valor": "peor",
+          "etiqueta": "Peor que ayer"
+        },
+        {
+          "valor": "mucho_peor",
+          "etiqueta": "Mucho peor, de golpe"
+        }
+      ]
+    },
+    {
+      "id": "herida",
+      "texto": "¿Cómo se ve la herida hoy?",
+      "tipo": "opciones",
+      "opciones": [
+        {
+          "valor": "igual",
+          "etiqueta": "Igual que ayer"
+        },
+        {
+          "valor": "mas_roja",
+          "etiqueta": "Más roja o más hinchada"
+        },
+        {
+          "valor": "liquido",
+          "etiqueta": "Está saliendo líquido"
+        },
+        {
+          "valor": "no_mire",
+          "etiqueta": "No la he mirado hoy"
+        }
+      ]
+    },
+    {
+      "id": "movilidad",
+      "texto": "¿Pudo levantarse y caminar hoy, aunque sea un poco?",
+      "tipo": "opciones",
+      "opciones": [
+        {
+          "valor": "si_solo",
+          "etiqueta": "Sí, solo o sola"
+        },
+        {
+          "valor": "si_ayuda",
+          "etiqueta": "Sí, con ayuda"
+        },
+        {
+          "valor": "no",
+          "etiqueta": "No pude"
+        }
+      ]
+    },
+    {
+      "id": "medicamentos",
+      "texto": "¿Tomó hoy los medicamentos como se los indicaron?",
+      "tipo": "opciones",
+      "opciones": [
+        {
+          "valor": "si",
+          "etiqueta": "Sí, todos"
+        },
+        {
+          "valor": "algunos",
+          "etiqueta": "Algunos no"
+        },
+        {
+          "valor": "no",
+          "etiqueta": "No los tomé"
+        },
+        {
+          "valor": "dudas",
+          "etiqueta": "Tengo dudas de cuáles tomar"
+        }
+      ]
+    }
+  ],
+  "reglas": [
+    {
+      "id": "r_emergencia",
+      "preguntaId": "emergencia",
+      "cuandoRespuestaEs": [
+        "si"
+      ],
+      "senalAlarmaId": "urgencia_general",
+      "fuente": {
+        "institucion": "MINSAL",
+        "url": "https://www.minsal.cl/servicios-de-urgencia-cuando-asistir-a-un-recinto-de-atencion-primaria-o-a-un-hospital/",
+        "fechaConsulta": "2026-08-05"
+      },
+      "estado": "vigente"
+    },
+    {
+      "id": "r_dolor_subito",
+      "preguntaId": "dolor",
+      "cuandoRespuestaEs": [
+        "mucho_peor"
+      ],
+      "senalAlarmaId": "sospecha_luxacion",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "r_herida",
+      "preguntaId": "herida",
+      "cuandoRespuestaEs": [
+        "mas_roja",
+        "liquido"
+      ],
+      "senalAlarmaId": "infeccion_sitio_quirurgico",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "id": "r_movilidad_perdida",
+      "preguntaId": "movilidad",
+      "cuandoRespuestaEs": [
+        "no"
+      ],
+      "senalAlarmaId": "caida",
+      "fuente": null,
+      "estado": "informacion_insuficiente"
+    }
+  ],
+  "escalamiento": [
+    {
+      "color": "rojo",
+      "responsable": null,
+      "tiempoRespuesta": null,
+      "fueraDeHorario": null,
+      "estado": "informacion_insuficiente"
+    },
+    {
+      "color": "amarillo",
+      "responsable": null,
+      "tiempoRespuesta": null,
+      "fueraDeHorario": null,
+      "estado": "informacion_insuficiente"
+    }
+  ]
+}
