@@ -10,7 +10,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { RUTA_MATRIZ } from "./db.js";
+import { db, RUTA_MATRIZ, nuevoId } from "./db.js";
 
 let matrizCache = null;
 
@@ -137,4 +137,30 @@ export function huecosDeLaMatriz(m) {
     }
   }
   return huecos;
+}
+
+/** Conserva un catálogo auditable de la matriz ejecutable, sin activar reglas
+ * que siguen pendientes de validación profesional. */
+const NIVEL = { rojo: "roja", amarillo: "amarilla", verde: "verde" };
+
+export function persistirMatriz(m) {
+  const filas = [];
+  for (const h of m.hitos) filas.push({ id: `HIT-${h.id}`, categoria: "hito", contenido: h, nivel: "ninguno" });
+  for (const s of m.senalesAlarma) filas.push({ id: `SIG-${s.id}`, categoria: "signo_alarma", contenido: s, nivel: NIVEL[s.color] ?? "ninguno" });
+  for (const s of m.sintomasEsperados) filas.push({ id: `SINT-${s.id}`, categoria: "recomendacion", contenido: s, nivel: "ninguno" });
+  for (const r of m.reglas) filas.push({ id: `REG-${r.id}`, categoria: "control", contenido: r, nivel: "ninguno" });
+  const insert = db.prepare(`INSERT OR REPLACE INTO matriz_clinica
+    (id, procedimiento, categoria, contenido, nivel_alerta, dia_objetivo, fuente, url_fuente, fecha_fuente, version, estado_validacion)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const transaccion = db.transaction(() => {
+    for (const fila of filas) {
+      const fuente = fila.contenido.fuente;
+      insert.run(fila.id, m.cirugia, fila.categoria, JSON.stringify(fila.contenido), fila.nivel,
+        fila.contenido.diaRelativo ?? null, fuente?.institucion ?? "Pendiente de validación profesional",
+        fuente?.url ?? null, fuente?.fechaConsulta ?? null, m.id,
+        fila.contenido.estado === "vigente" && fuente ? "validada" : "pendiente_validacion");
+    }
+  });
+  transaccion();
+  return filas.length;
 }

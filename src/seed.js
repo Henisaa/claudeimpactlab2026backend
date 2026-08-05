@@ -14,7 +14,7 @@ import path from "node:path";
 import { db, nuevoId, RUTA_DATA } from "./db.js";
 import { hashClave } from "./auth.js";
 import { indexar } from "./rag.js";
-import { matriz } from "./motor.js";
+import { matriz, persistirMatriz } from "./motor.js";
 
 const VAULT = process.env.VAULT_DIR ?? path.join(RUTA_DATA, "..", "..", "claudeimpactlab2026obsidian");
 
@@ -30,6 +30,7 @@ function diasAtras(n) {
 db.exec("PRAGMA foreign_keys = OFF");
 for (const tabla of [
   "rag_fts", "rag_chunks", "registro_operacion", "inventario_tratamiento",
+  "notificaciones_outbox", "cpo24_intentos", "solicitudes_rectificacion", "oposiciones_tratamiento", "solicitudes_arco",
   "auditoria_acceso", "consentimientos", "trazabilidad_extraccion",
   "documentos_clinicos", "alertas", "hitos_seguimiento", "seguimientos",
   "conciliacion_farmacologica", "indicaciones_alta", "eventos_quirurgicos",
@@ -150,6 +151,7 @@ const clave = hashClave("demo1234");
 insUsuario.run("USR-0001", "paciente@demo", clave, "paciente", "SYN-ETC-0001", null, null);
 insUsuario.run("USR-0002", "cuidador@demo", clave, "cuidador", null, "CUI-0001", null);
 insUsuario.run("USR-0003", "profesional@demo", clave, "profesional", null, null, "PRO-0001");
+insUsuario.run("USR-0004", "admin@demo", clave, "admin", null, null, null);
 
 // --- Consentimientos (Decreto 31: evidencia verificable, no checkbox) -------
 
@@ -172,6 +174,8 @@ db.prepare(
            '["datos de salud sintéticos","documentos clínicos sintéticos"]',
            '["paciente","cuidador autorizado","profesional tratante"]', '5 años')`,
 ).run(nuevoId("TRA"));
+
+persistirMatriz(matriz());
 
 // --- Historias de seguimiento por caso --------------------------------------
 // Solo se persisten alertas que el motor dispararía de verdad hoy: la única
@@ -354,4 +358,4 @@ console.log(`Seed listo:
   documentos:           ${n("documentos_clinicos")}
   campos trazables:     ${n("trazabilidad_extraccion")}
   chunks RAG:           ${n("rag_chunks")} (${chunksOficiales} oficiales)
-Usuarios demo (clave demo1234): paciente@demo, cuidador@demo, profesional@demo`);
+Usuarios demo (clave demo1234): paciente@demo, cuidador@demo, profesional@demo, admin@demo`);

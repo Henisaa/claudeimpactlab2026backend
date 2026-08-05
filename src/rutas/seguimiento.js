@@ -58,17 +58,32 @@ rutasSeguimiento.post(
     db.prepare(
       `INSERT INTO seguimientos
          (id, paciente_id, evento_quirurgico_id, dia_postoperatorio,
-          estado_herida, movilidad, adherencia_medicamentos,
+          contacto_24h_realizado, orientacion_entregada, recomendacion_urgencia,
+          dolor_reportado, nauseas, vomitos, fiebre_reportada, confusion_orientacion,
+          sangrado, estado_herida, movilidad, alimentacion_hidratacion,
+          adherencia_medicamentos, apoyo_cuidador, control_agendado,
           necesidad_derivacion, registrado_por, fuente_dato)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       seguimientoId,
       pacienteId,
       evento.id,
       dia,
+      respuestas.contacto24h === true ? 1 : 0,
+      respuestas.orientacionEntregada === true ? 1 : 0,
+      respuestas.recomendacionUrgencia === true ? 1 : 0,
+      respuestas.dolor === undefined ? null : Number(respuestas.dolor),
+      respuestas.nauseas === true ? 1 : 0,
+      respuestas.vomitos === true ? 1 : 0,
+      respuestas.fiebre === true ? 1 : 0,
+      respuestas.confusion === true ? 1 : 0,
+      respuestas.sangrado === true ? 1 : 0,
       HERIDA[respuestas.herida] ?? null,
       MOVILIDAD[respuestas.movilidad] ?? null,
+      respuestas.alimentacion ?? null,
       ADHERENCIA[respuestas.medicamentos] ?? null,
+      respuestas.apoyoCuidador === true ? 1 : 0,
+      respuestas.controlAgendado === true ? 1 : 0,
       evaluacion.color === "rojo" ? 1 : 0,
       req.usuario.tipo === "cuidador" ? "cuidador" : "paciente",
       `checkin_app:${JSON.stringify(respuestas)}`,
@@ -97,6 +112,20 @@ rutasSeguimiento.post(
     res.status(201).json({ seguimientoId, evaluacion });
   },
 );
+
+rutasSeguimiento.get("/seguimientos/:seguimientoId", (req, res) => {
+  const seguimiento = db.prepare("SELECT * FROM seguimientos WHERE id = ?").get(req.params.seguimientoId);
+  if (!seguimiento || !pacientesVisibles(req.usuario).includes(seguimiento.paciente_id)) return res.status(404).json({ error: "Seguimiento no encontrado." });
+  res.json({ seguimiento });
+});
+
+rutasSeguimiento.post("/seguimientos/:seguimientoId/revisar", soloRoles("profesional"), (req, res) => {
+  const seguimiento = db.prepare("SELECT * FROM seguimientos WHERE id = ?").get(req.params.seguimientoId);
+  if (!seguimiento || !pacientesVisibles(req.usuario).includes(seguimiento.paciente_id)) return res.status(404).json({ error: "Seguimiento no encontrado." });
+  db.prepare("UPDATE seguimientos SET revision_profesional = 1 WHERE id = ?").run(seguimiento.id);
+  auditar({ usuario: req.usuario, accion: "modificacion", recurso: `seguimientos/${seguimiento.id}`, campo: "revision_profesional", valorAnterior: seguimiento.revision_profesional, valorNuevo: 1, req });
+  res.json({ ok: true });
+});
 
 /** Alertas visibles según el rol (profesional: su establecimiento). */
 rutasSeguimiento.get("/alertas", (req, res) => {

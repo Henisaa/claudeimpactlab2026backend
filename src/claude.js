@@ -12,9 +12,10 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { anonimizar } from "./seguridad.js";
 
-const MODELO_VISION = "claude-opus-5";
-const MODELO_RAG = "claude-sonnet-5";
+const MODELO_VISION = process.env.CLAUDE_MODELO_VISION ?? "claude-opus-5";
+const MODELO_RAG = process.env.CLAUDE_MODELO ?? "claude-sonnet-5";
 
 let cliente = null;
 function anthropic() {
@@ -133,6 +134,9 @@ const ESQUEMA_EXTRACCION = {
  * @returns { borrador, uso }
  */
 export async function extraerDocumento(imagenes) {
+  if (process.env.CLAUDE_MOCK !== "false" || !process.env.ANTHROPIC_API_KEY) {
+    return { borrador: mockExtraccion(), uso: { tokensEntrada: 0, tokensSalida: 0, mock: true } };
+  }
   const respuesta = await anthropic().messages.create({
     model: MODELO_VISION,
     max_tokens: 16000,
@@ -227,6 +231,18 @@ const ESQUEMA_RAG = {
 };
 
 export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
+  if (process.env.CLAUDE_MOCK !== "false" || !process.env.ANTHROPIC_API_KEY) {
+    const primero = fragmentos[0];
+    return {
+      respuesta: primero
+        ? `${anonimizar(primero.contenido).slice(0, 500)} [1]`
+        : "Sus documentos y las guías disponibles no responden esta pregunta.",
+      fragmentos_citados: primero ? [1] : [],
+      informacion_insuficiente: !primero,
+      requiere_revision_profesional: true,
+      uso: { tokensEntrada: 0, tokensSalida: 0, mock: true },
+    };
+  }
   const listado = fragmentos
     .map(
       (f, i) =>
@@ -270,5 +286,19 @@ Pregunta: ${pregunta}`,
       tokensEntrada: respuesta.usage.input_tokens,
       tokensSalida: respuesta.usage.output_tokens,
     },
+  };
+}
+
+function mockExtraccion() {
+  return {
+    tipo_documento: "informe_alta",
+    fecha_alta: null,
+    medicamentos: [],
+    indicaciones_curacion: null,
+    proximo_control: null,
+    alergias: [],
+    datos_faltantes: ["Extracción MOCK: no se interpreta el contenido visual."],
+    conflictos: [],
+    advertencias: ["Resultado simulado; confirmar contra el documento original."],
   };
 }

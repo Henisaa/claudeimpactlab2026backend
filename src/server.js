@@ -10,15 +10,33 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import http from "node:http";
+import https from "node:https";
+import { readFileSync } from "node:fs";
 import { login, autenticar } from "./auth.js";
 import { auditarLecturas } from "./auditoria.js";
 import { rutasBaul } from "./rutas/baul.js";
 import { rutasSeguimiento } from "./rutas/seguimiento.js";
 import { rutasDerechos } from "./rutas/derechos.js";
+import { rutasAdmin } from "./rutas/admin.js";
+import { rutasCrud } from "./rutas/crud.js";
+import { rutasCpo24 } from "./rutas/cpo24.js";
 
-const app = express();
+export const app = express();
+const intentos = new Map();
 app.use(cors({ origin: ["http://localhost:3000", "http://127.0.0.1:3000"] }));
 app.use(express.json({ limit: "1mb" }));
+
+app.use((req, res, next) => {
+  const clave = `${req.ip}:${req.path}`;
+  const ahora = Date.now();
+  const previo = intentos.get(clave) ?? { inicio: ahora, cantidad: 0 };
+  if (ahora - previo.inicio > 60_000) previo.inicio = ahora, previo.cantidad = 0;
+  previo.cantidad += 1;
+  intentos.set(clave, previo);
+  if (previo.cantidad > 120) return res.status(429).json({ error: "Demasiadas solicitudes." });
+  next();
+});
 
 app.get("/api/v1/salud", (_req, res) => res.json({ ok: true }));
 
@@ -32,7 +50,7 @@ app.post("/api/v1/auth/login", (req, res) => {
   res.json(sesion);
 });
 
-app.use("/api/v1", autenticar, auditarLecturas, rutasBaul, rutasSeguimiento, rutasDerechos);
+app.use("/api/v1", autenticar, auditarLecturas, rutasBaul, rutasSeguimiento, rutasDerechos, rutasCrud, rutasCpo24, rutasAdmin);
 
 // Manejador de errores: mensajes claros, sin filtrar detalles internos.
 app.use((err, _req, res, _next) => {
@@ -45,7 +63,21 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: mensaje });
 });
 
-const PUERTO = process.env.PORT ?? 4000;
-app.listen(PUERTO, () => {
-  console.log(`Backend ETC escuchando en http://localhost:${PUERTO}`);
-});
+export function iniciarServidor() {
+  const PUERTO = process.env.PORT ?? 4000;
+  const cert = process.env.TLS_CERT_PATH;
+  const key = process.env.TLS_KEY_PATH;
+  if (cert && key) {
+    return https.createServer({ key: readFileSync(key), cert: readFileSync(cert) }, app).listen(PUERTO, () => {
+      console.log(`Backend ETC escuchando en https://localhost:${PUERTO}`);
+    });
+  }
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_HTTP !== "true") {
+    throw new Error("TLS_CERT_PATH y TLS_KEY_PATH son obligatorias en producción.");
+  }
+  return http.createServer(app).listen(PUERTO, () => {
+    console.warn(`Backend ETC escuchando en http://localhost:${PUERTO} (solo desarrollo)`);
+  });
+}
+
+if (process.argv[1] === new URL(import.meta.url).pathname) iniciarServidor();

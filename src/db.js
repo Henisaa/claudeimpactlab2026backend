@@ -1,8 +1,7 @@
 /**
- * Base de datos. Usa node:sqlite (incluido en Node >= 24): sin dependencias
- * nativas que compilar. Abre data/prototipo.db, cuyo esquema de 17 tablas ya
- * implementa el modelo de BACKEND_IDEALIZADO.md (pacientes, seguimientos,
- * alertas, consentimientos, auditoría, etc.).
+ * Base de datos SQLite. Se usa better-sqlite3 para que el backend sea
+ * reproducible desde Node >= 20. El esquema base se crea desde schema.sql y
+ * las migraciones pequeñas de compatibilidad se aplican al arrancar.
  *
  * Aquí solo se agregan las piezas nuevas:
  *  - rag_chunks + rag_fts: el índice de recuperación del "baúl" (FTS5/BM25).
@@ -10,8 +9,8 @@
  *    al baúl sin que una persona lo haya revisado.
  */
 
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import Database from "better-sqlite3";
+import { mkdirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,9 +21,16 @@ export const RUTA_UPLOADS = path.join(RAIZ, "uploads");
 export const RUTA_MATRIZ = path.join(RUTA_DATA, "matriz-etc.json");
 mkdirSync(RUTA_UPLOADS, { recursive: true });
 
-export const db = new DatabaseSync(path.join(RUTA_DATA, "prototipo.db"));
-db.exec("PRAGMA journal_mode = WAL");
-db.exec("PRAGMA foreign_keys = ON");
+const rutaDb = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.join(RUTA_DATA, "prototipo.db");
+mkdirSync(path.dirname(rutaDb), { recursive: true });
+export const db = new Database(rutaDb);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+const schemaPath = path.join(RAIZ, "src", "schema.sql");
+db.exec(readFileSync(schemaPath, "utf8"));
 
 // --- Migraciones idempotentes ----------------------------------------------
 

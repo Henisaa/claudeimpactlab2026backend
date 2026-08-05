@@ -14,14 +14,26 @@ import bcrypt from "bcryptjs";
 import { db } from "./db.js";
 import { auditar } from "./auditoria.js";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "solo-para-demo-local";
-const DURACION = "12h";
+// Sin secreto por defecto fuera del modo demo: en producción (o con
+// DEMO_MODE=false) el servidor no arranca sin JWT_SECRET explícito.
+const DEMO = process.env.DEMO_MODE === "true" || process.env.NODE_ENV !== "production";
+if (!process.env.JWT_SECRET && !DEMO) {
+  throw new Error("JWT_SECRET es obligatorio fuera del modo demo.");
+}
+const JWT_SECRET = process.env.JWT_SECRET ?? "solo-para-demo-local-change-me";
+const DURACION = process.env.JWT_EXPIRES_IN ?? "2h";
 
 export function login(username, password, req) {
   const usuario = db
     .prepare("SELECT * FROM usuarios WHERE username = ? AND activo = 1")
     .get(username);
   if (!usuario || !bcrypt.compareSync(password, usuario.password_hash)) {
+    auditar({
+      usuario: { id: usuario?.id ?? String(username), tipo: usuario?.tipo_usuario ?? "desconocido" },
+      accion: "login_fallido",
+      recurso: "auth",
+      req,
+    });
     return null;
   }
   auditar({
@@ -137,6 +149,14 @@ export function consentimientoVigente(pacienteId, tipo) {
     )
     .get(pacienteId, tipo);
   return fila?.otorgado === 1;
+}
+
+export function exigirTratamiento(req, res, next) {
+  const pacienteId = req.params.pacienteId ?? req.body?.pacienteId;
+  if (!pacienteId || !consentimientoVigente(pacienteId, "tratamiento_datos")) {
+    return res.status(403).json({ error: "Falta el consentimiento de tratamiento de datos." });
+  }
+  next();
 }
 
 /** Middleware: bloquea si falta un consentimiento (Decreto 31 / Ley 21.719). */
