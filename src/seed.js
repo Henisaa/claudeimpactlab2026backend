@@ -137,12 +137,14 @@ insConc.run(nuevoId("CFA"), "SYN-ETC-0003", eventos["SYN-ETC-0003"], "Aspirina",
 
 // --- Cuidadores y usuarios demo ---------------------------------------------
 
+// Los teléfonos son de la franja reservada para ficción; van cifrados como el
+// resto de los campos sensibles y nunca aparecen dentro del mensaje enviado.
 const insCuidador = db.prepare(
-  `INSERT INTO cuidadores (id, paciente_id, nombre_ficticio, relacion, permisos, consentimiento_paciente, fecha_autorizacion)
-   VALUES (?, ?, ?, ?, '{"ver_expediente":true,"registrar_sintomas":true}', 1, datetime('now'))`,
+  `INSERT INTO cuidadores (id, paciente_id, nombre_ficticio, relacion, permisos, consentimiento_paciente, fecha_autorizacion, telefono_contacto)
+   VALUES (?, ?, ?, ?, '{"ver_expediente":true,"registrar_sintomas":true}', 1, datetime('now'), ?)`,
 );
-insCuidador.run("CUI-0001", "SYN-ETC-0007", "Carmen T. (ficticio)", "hija");
-insCuidador.run("CUI-0002", "SYN-ETC-0001", "Pablo G. (ficticio)", "hijo");
+insCuidador.run("CUI-0001", "SYN-ETC-0007", "Carmen T. (ficticio)", "hija", cifrar("+56900000001"));
+insCuidador.run("CUI-0002", "SYN-ETC-0001", "Pablo G. (ficticio)", "hijo", cifrar("+56900000002"));
 
 const insUsuario = db.prepare(
   `INSERT INTO usuarios (id, username, password_hash, tipo_usuario, paciente_id, cuidador_id, profesional_id)

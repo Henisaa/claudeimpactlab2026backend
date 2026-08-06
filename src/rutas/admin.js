@@ -23,10 +23,14 @@ rutasAdmin.get("/admin/matriz", soloRoles("admin"), (_req, res) => {
 rutasAdmin.get("/admin/notificaciones", soloRoles("admin"), (_req, res) => {
   res.json({ notificaciones: db.prepare("SELECT * FROM notificaciones_outbox ORDER BY creada_en DESC").all() });
 });
-rutasAdmin.post("/admin/notificaciones/procesar", soloRoles("admin"), (req, res) => {
-  const procesadas = procesarOutbox();
-  auditar({ usuario: req.usuario, accion: "modificacion", recurso: "admin/notificaciones", valorNuevo: procesadas, req });
-  res.json({ procesadas });
+rutasAdmin.post("/admin/notificaciones/procesar", soloRoles("admin"), async (req, res, next) => {
+  try {
+    const procesadas = await procesarOutbox();
+    auditar({ usuario: req.usuario, accion: "modificacion", recurso: "admin/notificaciones", valorNuevo: JSON.stringify(procesadas), req });
+    res.json({ procesadas });
+  } catch (err) {
+    next(err);
+  }
 });
 
 rutasAdmin.get("/admin/usuarios", soloRoles("admin"), (_req, res) => {

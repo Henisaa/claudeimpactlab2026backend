@@ -108,6 +108,23 @@ rutasSeguimiento.post(
 
     const alertaEscalada = escalarDosAmarillas(pacienteId, seguimientoId);
 
+    // Avisos a la persona de apoyo. Se encolan aquí y se envían al procesar la
+    // bandeja, que es donde se verifica el consentimiento de contacto. El
+    // aviso no lleva el síntoma ni el medicamento: solo que hay algo que
+    // acompañar (ver notificaciones.js).
+    const avisos = [];
+    if (evaluacion.color === "rojo") {
+      avisos.push("ALERTA_ESCALADA");
+    } else if (evaluacion.color === "amarillo") {
+      avisos.push("CHECKIN_REQUIERE_APOYO");
+    }
+    if (ADHERENCIA[respuestas.medicamentos] && ADHERENCIA[respuestas.medicamentos] !== "completa") {
+      avisos.push("MEDICACION_SIN_CONFIRMAR");
+    }
+    const notificaciones = avisos
+      .map((evento) => encolar(pacienteId, "cuidador", evento, { seguimientoId }))
+      .filter(Boolean);
+
     auditar({
       usuario: req.usuario,
       accion: "escritura",
@@ -115,7 +132,7 @@ rutasSeguimiento.post(
       req,
     });
 
-     res.status(201).json({ seguimientoId, evaluacion, requiere_revision_profesional: true, alertaEscalada });
+     res.status(201).json({ seguimientoId, evaluacion, requiere_revision_profesional: true, alertaEscalada, notificaciones });
   },
 );
 

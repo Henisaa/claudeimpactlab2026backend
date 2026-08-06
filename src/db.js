@@ -118,6 +118,16 @@ if (!sqlRagChunks.includes("nota_proyecto")) {
   })();
 }
 
+// Teléfono de la persona de apoyo, para el canal WhatsApp. Cifrado con la
+// misma capa que el resto de los campos sensibles; nunca viaja en el mensaje.
+const columnasCuidadores = db
+  .prepare("SELECT name FROM pragma_table_info('cuidadores')")
+  .all()
+  .map((c) => c.name);
+if (!columnasCuidadores.includes("telefono_contacto")) {
+  db.exec("ALTER TABLE cuidadores ADD COLUMN telefono_contacto TEXT");
+}
+
 const columnasTraz = db
   .prepare("SELECT name FROM pragma_table_info('trazabilidad_extraccion')")
   .all()

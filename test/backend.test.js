@@ -176,6 +176,40 @@ test("rectificación queda pendiente y requiere revisión profesional", async ()
   assert.equal(revisar.status, 200);
 });
 
+test("un control sin medicamentos confirmados avisa a la persona de apoyo, sin datos clínicos", async () => {
+  const respuesta = await request("/api/v1/pacientes/SYN-ETC-0001/checkins", { method: "POST", body: checkin({ medicamentos: "no" }) }, tokens.paciente);
+  assert.equal(respuesta.status, 201);
+  assert.ok((await respuesta.json()).notificaciones.length >= 1);
+
+  const procesar = await request("/api/v1/pacientes/SYN-ETC-0001/notificaciones/procesar", { method: "POST", body: {} }, tokens.paciente);
+  assert.ok((await procesar.json()).enviadas >= 1);
+
+  const bandeja = await request("/api/v1/pacientes/SYN-ETC-0001/notificaciones", {}, tokens.paciente);
+  const aviso = (await bandeja.json()).notificaciones.find((n) => n.evento === "MEDICACION_SIN_CONFIRMAR");
+  assert.equal(aviso.canal, "whatsapp");
+  assert.equal(aviso.estado, "enviada");
+  // El canal es de terceros: el mensaje no nombra a la persona ni el síntoma.
+  for (const filtrado of ["María", "SYN-ETC-0001", "dolor", "herida", "Rivaroxab"]) {
+    assert.ok(!aviso.mensaje.includes(filtrado), `el mensaje no debe contener "${filtrado}"`);
+  }
+});
+
+test("sin consentimiento de contacto el aviso se cancela, no se envía", async () => {
+  const revocar = await request("/api/v1/pacientes/SYN-ETC-0001/consentimientos/contacto_telefonico", { method: "DELETE" }, tokens.paciente);
+  assert.equal(revocar.status, 200);
+
+  await request("/api/v1/pacientes/SYN-ETC-0001/checkins", { method: "POST", body: checkin({ medicamentos: "no" }) }, tokens.paciente);
+  const procesar = await request("/api/v1/pacientes/SYN-ETC-0001/notificaciones/procesar", { method: "POST", body: {} }, tokens.paciente);
+  const resultado = await procesar.json();
+  assert.equal(resultado.enviadas, 0);
+  assert.ok(resultado.canceladas >= 1);
+
+  const bandeja = await request("/api/v1/pacientes/SYN-ETC-0001/notificaciones", {}, tokens.paciente);
+  const cancelado = (await bandeja.json()).notificaciones.find((n) => n.estado === "cancelada");
+  assert.ok(cancelado, "debe quedar registrado el aviso cancelado");
+  assert.match(cancelado.ultimo_error, /consentimiento/i);
+});
+
 test("supresión anonimiza y conserva la auditoría", async () => {
   const respuesta = await request("/api/v1/pacientes/SYN-ETC-0001/supresion", { method: "POST", body: {} }, tokens.paciente);
   assert.equal(respuesta.status, 202);
