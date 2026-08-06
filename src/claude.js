@@ -196,8 +196,9 @@ fuera una publicación oficial.
 
 Reglas que no puedes romper:
 
-1. Cada afirmación de tu respuesta debe terminar con la cita [n] del fragmento que la
-   respalda. Sin fragmento que la respalde, la afirmación no se escribe.
+1. Cada afirmación de tu respuesta debe estar respaldada por uno de los fragmentos
+   entregados. Sin fragmento que la respalde, la afirmación no se escribe: no hay
+   respuesta "de memoria" ni relleno entre citas.
 2. Si los fragmentos no contienen la respuesta, dilo con claridad: "Sus documentos y las
    guías disponibles no responden esta pregunta" y recomienda anotarla para el próximo
    control o llamar a Salud Responde (600 360 7777). No completes con conocimiento propio.
@@ -248,11 +249,24 @@ export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
         ? `${primero.contenido.slice(0, 500)} [1]`
         : "Sus documentos y las guías disponibles no responden esta pregunta.",
       fragmentos_citados: primero ? [1] : [],
+      citas: [],
       informacion_insuficiente: !primero,
       requiere_revision_profesional: true,
       uso: { tokensEntrada: 0, tokensSalida: 0, mock: true },
     };
   }
+
+  // Camino principal: citas ancladas por la API. Si falla por cualquier razón
+  // (modelo, formato, red), se responde igual por el camino estructurado en
+  // vez de dejar a la persona sin respuesta.
+  if (process.env.CLAUDE_CITATIONS !== "false" && fragmentosSeguros.length > 0) {
+    try {
+      return await responderConCitas(preguntaSegura, fragmentosSeguros, contextoSeguro);
+    } catch (err) {
+      console.warn(`[rag] Citations falló, se usa el camino estructurado: ${err.message}`);
+    }
+  }
+
   const listado = fragmentosSeguros
     .map(
       (f, i) =>
@@ -263,7 +277,8 @@ export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
   const respuesta = await anthropic().messages.create({
     model: MODELO_RAG,
     max_tokens: 2000,
-    system: SYSTEM_RAG,
+    // Sin Citations la cita la escribe el modelo, así que hay que pedírsela.
+    system: `${SYSTEM_RAG}\n\nFormato: termina cada afirmación con la cita [n] del fragmento que la respalda.`,
     output_config: { format: { type: "json_schema", schema: ESQUEMA_RAG } },
     messages: [
       {
@@ -292,9 +307,89 @@ Pregunta: ${preguntaSegura}`,
   }
   return {
     ...JSON.parse(texto.text),
+    citas: [],
     uso: {
       tokensEntrada: respuesta.usage.input_tokens,
       tokensSalida: respuesta.usage.output_tokens,
+    },
+  };
+}
+
+/**
+ * Respuesta con citas ancladas por la API (Citations).
+ *
+ * La diferencia con pedirle al modelo que escriba "[n]" no es cosmética: cada
+ * fragmento viaja como un documento y la API devuelve, junto al texto, el
+ * `cited_text` exacto que lo respalda. La cita literal deja de depender de que
+ * el modelo obedezca la instrucción y pasa a ser un dato verificable contra el
+ * documento de origen — que es la tesis del proyecto.
+ */
+async function responderConCitas(pregunta, fragmentos, contexto) {
+  const documentos = fragmentos.map((f) => ({
+    type: "document",
+    source: { type: "text", media_type: "text/plain", data: f.contenido },
+    title: `[${fragmentos.indexOf(f) + 1}] ${f.fuente}${f.seccion ? `, ${f.seccion}` : ""}`,
+    context: etiquetaFragmento(f.tipo),
+    citations: { enabled: true },
+  }));
+
+  const respuesta = await anthropic().messages.create({
+    model: MODELO_RAG,
+    max_tokens: 2000,
+    system: SYSTEM_RAG,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...documentos,
+          {
+            type: "text",
+            text: `Contexto del paciente (sintético): ${contexto}\n\nPregunta: ${pregunta}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  if (respuesta.stop_reason === "refusal") {
+    const err = new Error("El modelo declinó responder esta pregunta.");
+    err.status = 422;
+    throw err;
+  }
+
+  const bloques = respuesta.content.filter((b) => b.type === "text");
+  if (bloques.length === 0) throw new Error("Sin contenido de texto en la respuesta.");
+
+  const citas = [];
+  const citados = new Set();
+  for (const bloque of bloques) {
+    for (const cita of bloque.citations ?? []) {
+      const n = (cita.document_index ?? 0) + 1;
+      const fragmento = fragmentos[n - 1];
+      citados.add(n);
+      citas.push({
+        n,
+        textoCitado: (cita.cited_text ?? "").trim(),
+        fuente: fragmento?.fuente ?? cita.document_title ?? null,
+        tipo: fragmento?.tipo ?? null,
+        url: fragmento?.url_fuente ?? null,
+      });
+    }
+  }
+
+  return {
+    respuesta: bloques.map((b) => b.text).join(""),
+    fragmentos_citados: [...citados].sort((a, b) => a - b),
+    citas,
+    // Sin una sola cita, la respuesta no está respaldada por el baúl.
+    informacion_insuficiente: citados.size === 0,
+    // El baúl organiza lo que ya escribió un profesional; confirmarlo con el
+    // equipo tratante nunca deja de corresponder.
+    requiere_revision_profesional: true,
+    uso: {
+      tokensEntrada: respuesta.usage.input_tokens,
+      tokensSalida: respuesta.usage.output_tokens,
+      citations: true,
     },
   };
 }
