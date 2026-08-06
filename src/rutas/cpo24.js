@@ -58,13 +58,13 @@ rutasCpo24.get("/pacientes/:pacienteId/notificaciones", (req, res) => {
     return res.status(403).json({ error: "No autorizado." });
   }
   const filas = db
-    .prepare("SELECT id, canal, destinatario_tipo, evento, estado, intentos, ultimo_error, creada_en, enviada_en FROM notificaciones_outbox WHERE paciente_id = ? ORDER BY creada_en DESC, rowid DESC LIMIT 50")
+    .prepare("SELECT id, canal, destinatario_tipo, evento, estado, intentos, ultimo_error, creada_en, enviada_en, payload FROM notificaciones_outbox WHERE paciente_id = ? ORDER BY creada_en DESC, rowid DESC LIMIT 50")
     .all(pacienteId);
   res.json({
     proveedor: PROVEEDOR,
     notificaciones: filas.map((fila) => ({
       ...fila,
-      mensaje: redactarMensaje(fila.evento, pacienteId)?.texto ?? null,
+      mensaje: redactarMensaje(fila.evento, pacienteId, JSON.parse(fila.payload ?? "null"))?.texto ?? null,
     })),
   });
 });

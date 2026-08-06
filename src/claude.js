@@ -184,6 +184,132 @@ export async function extraerDocumento(imagenes, textoDocumento = "") {
 }
 
 // ---------------------------------------------------------------------------
+// 1b. Lectura de una fotografía de medicamento (prototipo)
+// ---------------------------------------------------------------------------
+// Claude lee ÚNICAMENTE lo visible (nombre, concentración) y conserva la cita
+// literal. No dice si el medicamento es el correcto: eso lo decide el
+// comparador determinístico (src/medicacion/comparar.js), nunca el modelo.
+
+const SYSTEM_MEDICAMENTO = `Eres el lector de etiquetas de medicamentos del proyecto de continuidad de cuidados.
+Tu única función es leer lo que está escrito en una fotografía de un envase, blíster o etiqueta de medicamento.
+
+Reglas que no puedes romper:
+
+1. Transcribe, no interpretes. Cada campo lleva "texto_original" con la cita literal visible en la foto.
+2. Nunca completes un dato que no esté visible. Si no se ve, el valor va en null y lo declaras en "datos_faltantes".
+3. NO decidas ni sugieras si el medicamento es el correcto, la dosis adecuada ni nada por el estilo: otra parte del sistema compara esto.
+4. Marca "confianza": "alta" si el texto es nítido, "media" si está parcialmente cortado o en ángulo, "baja" si estás adivinando. Prefiere declarar baja antes que acertar.
+5. "calidad_imagen" describe la foto: "alta" si se lee con claridad, "media" si cuesta, "baja" si es ilegible (borrosa, oscura, desenfocada).
+6. Si la foto no parece ser un envase, blíster o etiqueta de medicamento, o no se lee ningún texto, devuelve valores null y calidad_imagen "baja".
+7. Si detectas datos que parecen de una persona real (RUN, nombre completo, teléfono, dirección), no los transcribas y anótalo en "advertencias".
+8. No emitas diagnósticos ni conductas.`;
+
+const ESQUEMA_MEDICAMENTO = {
+  type: "object",
+  additionalProperties: false,
+  required: ["calidad_imagen", "medicamento_observado", "advertencias", "datos_faltantes"],
+  properties: {
+    calidad_imagen: { type: "string", enum: ["alta", "media", "baja"] },
+    medicamento_observado: {
+      type: "object",
+      additionalProperties: false,
+      required: ["nombre", "concentracion"],
+      properties: {
+        nombre: CAMPO_TRAZABLE,
+        concentracion: CAMPO_TRAZABLE,
+      },
+    },
+    advertencias: { type: "array", items: { type: "string" } },
+    datos_faltantes: { type: "array", items: { type: "string" } },
+  },
+};
+
+/**
+ * @param imagenes  [{ mediaType, base64 }]
+ * @param opciones  { demoResultado?: "coincide"|"no_coincide"|"no_se_puede_confirmar" }
+ * @returns { borrador, uso }
+ *
+ * En modo MOCK el resultado es determinístico: se usa para la demo del pitch,
+ * donde el mismo flujo debe dar el mismo resultado cada vez. El campo
+ * demoResultado solo se respeta en modo MOCK y sirve para mostrar los tres
+ * desenlaces posibles del prototipo.
+ */
+export async function extraerMedicamento(imagenes, { demoResultado = null } = {}) {
+  if (process.env.CLAUDE_MOCK !== "false" || !process.env.ANTHROPIC_API_KEY) {
+    return { borrador: mockMedicamento(demoResultado), uso: { tokensEntrada: 0, tokensSalida: 0, mock: true } };
+  }
+  const respuesta = await anthropic().messages.create({
+    model: MODELO_VISION,
+    max_tokens: 2000,
+    system: SYSTEM_MEDICAMENTO,
+    output_config: { format: { type: "json_schema", schema: ESQUEMA_MEDICAMENTO } },
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...imagenes.map((img) => ({
+            type: "image",
+            source: { type: "base64", media_type: img.mediaType, data: img.base64 },
+          })),
+          { type: "text", text: "Lee la etiqueta de este medicamento siguiendo tus reglas. Cita literal en texto_original, null donde no se vea nada." },
+        ],
+      },
+    ],
+  });
+
+  if (respuesta.stop_reason === "refusal") {
+    const err = new Error("El modelo declinó procesar esta imagen.");
+    err.status = 422;
+    throw err;
+  }
+  const texto = respuesta.content.find((b) => b.type === "text");
+  if (!texto) {
+    const err = new Error("El modelo no devolvió contenido estructurado.");
+    err.status = 502;
+    throw err;
+  }
+  return {
+    borrador: JSON.parse(texto.text),
+    uso: { tokensEntrada: respuesta.usage.input_tokens, tokensSalida: respuesta.usage.output_tokens },
+  };
+}
+
+/** Escenarios fijos de la demo: el pitch puede mostrar cada desenlace. */
+function mockMedicamento(demoResultado) {
+  const campo = (valor, texto, confianza) => ({ valor, texto_original: texto, confianza });
+  const escenarios = {
+    coincide: {
+      calidad_imagen: "alta",
+      medicamento_observado: {
+        nombre: campo("Rivaroxabán", "Rivaroxaban", "alta"),
+        concentracion: campo("10 mg", "10 mg", "alta"),
+      },
+      advertencias: ["Lectura simulada de prototipo (MOCK): la demo fuerza el resultado 'coincide'."],
+      datos_faltantes: [],
+    },
+    no_coincide: {
+      calidad_imagen: "alta",
+      medicamento_observado: {
+        nombre: campo("Amoxicilina", "Amoxicilina", "alta"),
+        concentracion: campo("500 mg", "500 mg", "alta"),
+      },
+      advertencias: ["Lectura simulada de prototipo (MOCK): la demo fuerza el resultado 'no_coincide'."],
+      datos_faltantes: [],
+    },
+    no_se_puede_confirmar: {
+      calidad_imagen: "baja",
+      medicamento_observado: {
+        nombre: campo(null, "(ilegible)", "baja"),
+        concentracion: campo(null, "(ilegible)", "baja"),
+      },
+      advertencias: ["Lectura simulada de prototipo (MOCK): la demo fuerza 'no se pudo confirmar'."],
+      datos_faltantes: ["nombre", "concentración"],
+    },
+  };
+  return escenarios[demoResultado] ?? escenarios.coincide;
+}
+
+// ---------------------------------------------------------------------------
 // 2. Respuesta RAG desde el baúl
 // ---------------------------------------------------------------------------
 

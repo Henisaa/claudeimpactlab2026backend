@@ -210,6 +210,76 @@ test("sin consentimiento de contacto el aviso se cancela, no se envía", async (
   assert.match(cancelado.ultimo_error, /consentimiento/i);
 });
 
+test("medicación: la foto que coincide verifica la toma y avisa a la persona de apoyo", async () => {
+  const hoy = await request("/api/v1/pacientes/SYN-ETC-0001/medicacion/hoy", {}, tokens.paciente);
+  assert.equal(hoy.status, 200);
+  const cuerpo = await hoy.json();
+  assert.ok(cuerpo.planes.length >= 1, "el seed deja un plan activo");
+  assert.ok(cuerpo.tomas.length >= 1, "el seed materializa la toma de hoy");
+
+  const toma = cuerpo.tomas[0];
+  const formulario = new FormData();
+  formulario.append("imagen", new Blob(["foto-demo"], { type: "image/jpeg" }), "foto.jpg");
+  formulario.append("demoResultado", "coincide");
+  const foto = await fetch(`${base}/api/v1/medicacion/tomas/${toma.id}/foto`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${tokens.paciente}` },
+    body: formulario,
+  });
+  assert.equal(foto.status, 201);
+  const resultado = await foto.json();
+  assert.equal(resultado.verificacion.resultado_comparacion, "coincide");
+  assert.equal(resultado.verificacion.requiere_revision_profesional, 1);
+  assert.equal(db.prepare("SELECT estado FROM tomas_programadas WHERE id = ?").get(toma.id).estado, "coincide");
+  assert.ok(
+    db
+      .prepare("SELECT 1 FROM notificaciones_outbox WHERE paciente_id = 'SYN-ETC-0001' AND evento = 'MEDICACION_VERIFICADA'")
+      .get(),
+    "la verificación encola el aviso de WhatsApp",
+  );
+  assert.ok(db.prepare("SELECT 1 FROM evidencias_medicacion WHERE toma_programada_id = ?").get(toma.id), "la foto queda como evidencia cifrada");
+
+  const confirmar = await request(`/api/v1/medicacion/tomas/${toma.id}/confirmar`, { method: "POST", body: { declaracion: "tomada" } }, tokens.paciente);
+  assert.equal(confirmar.status, 200);
+  assert.equal(db.prepare("SELECT declaracion FROM tomas_programadas WHERE id = ?").get(toma.id).declaracion, "tomada");
+});
+
+test("medicación: un medicamento distinto queda no_coincide y requiere revisión profesional", async () => {
+  const crear = await request("/api/v1/pacientes/SYN-ETC-0001/medicacion/demo/toma-hoy", { method: "POST", body: {} }, tokens.paciente);
+  assert.equal(crear.status, 201);
+  const toma = (await crear.json()).toma;
+
+  const formulario = new FormData();
+  formulario.append("imagen", new Blob(["foto-demo"], { type: "image/jpeg" }), "foto.jpg");
+  formulario.append("demoResultado", "no_coincide");
+  const foto = await fetch(`${base}/api/v1/medicacion/tomas/${toma.id}/foto`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${tokens.paciente}` },
+    body: formulario,
+  });
+  assert.equal(foto.status, 201);
+  const resultado = await foto.json();
+  assert.equal(resultado.verificacion.resultado_comparacion, "no_coincide");
+  assert.equal(resultado.verificacion.requiere_revision_profesional, 1);
+  assert.equal(db.prepare("SELECT estado FROM tomas_programadas WHERE id = ?").get(toma.id).estado, "no_coincide");
+});
+
+test("medicación: una foto ilegible queda no_se_puede_confirmar", async () => {
+  const crear = await request("/api/v1/pacientes/SYN-ETC-0001/medicacion/demo/toma-hoy", { method: "POST", body: {} }, tokens.paciente);
+  const toma = (await crear.json()).toma;
+  const formulario = new FormData();
+  formulario.append("imagen", new Blob(["foto-demo"], { type: "image/jpeg" }), "foto.jpg");
+  formulario.append("demoResultado", "no_se_puede_confirmar");
+  const foto = await fetch(`${base}/api/v1/medicacion/tomas/${toma.id}/foto`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${tokens.paciente}` },
+    body: formulario,
+  });
+  assert.equal(foto.status, 201);
+  const resultado = await foto.json();
+  assert.equal(resultado.verificacion.resultado_comparacion, "no_se_puede_confirmar");
+});
+
 test("supresión anonimiza y conserva la auditoría", async () => {
   const respuesta = await request("/api/v1/pacientes/SYN-ETC-0001/supresion", { method: "POST", body: {} }, tokens.paciente);
   assert.equal(respuesta.status, 202);

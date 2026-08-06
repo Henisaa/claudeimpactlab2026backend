@@ -16,6 +16,7 @@ import { hashClave } from "./auth.js";
 import { indexar } from "./rag.js";
 import { matriz, persistirMatriz } from "./motor.js";
 import { cifrar, cifrarJson } from "./seguridad.js";
+import { materializarTomas } from "./workers/medicacion.js";
 
 const VAULT = process.env.VAULT_DIR ?? path.join(RUTA_DATA, "..", "..", "claudeimpactlab2026obsidian");
 
@@ -34,6 +35,7 @@ for (const tabla of [
   "notificaciones_outbox", "cpo24_intentos", "solicitudes_rectificacion", "oposiciones_tratamiento", "solicitudes_arco",
   "auditoria_acceso", "consentimientos", "trazabilidad_extraccion",
   "documentos_clinicos", "alertas", "hitos_seguimiento", "seguimientos",
+  "verificaciones_medicacion", "evidencias_medicacion", "tomas_programadas", "planes_medicacion",
   "conciliacion_farmacologica", "indicaciones_alta", "eventos_quirurgicos",
   "usuarios", "cuidadores", "profesionales", "pacientes",
   "preferencias_accesibilidad", "matriz_versiones", "matriz_clinica", "establecimientos",
@@ -180,6 +182,32 @@ db.prepare(
            '["datos de salud sintéticos","documentos clínicos sintéticos"]',
            '["paciente","cuidador autorizado","profesional tratante"]', '5 años')`,
 ).run(nuevoId("TRA"));
+
+// --- Planes de medicación del prototipo (foto del envase) --------------------
+// El horario es explícito y lo "escribe" un profesional ficticio: el sistema
+// no infiere "10:00" desde "cada 24 horas". El rivaroxabán viene de la receta
+// sintética estándar del caso índice (BACKEND_IDEALIZADO §7.3).
+const insPlan = db.prepare(
+  `INSERT INTO planes_medicacion
+     (id, paciente_id, medicamento_nombre, concentracion, frecuencia_texto, duracion_texto,
+      horario_local, zona_horaria, ventana_minutos, cita_original, estado, aprobado_por, aprobado_en)
+   VALUES (?, ?, ?, ?, ?, ?, ?, 'America/Santiago', 15, ?, 'activo', 'PRO-0001', datetime('now'))`,
+);
+const plan0001 = nuevoId("PLN");
+insPlan.run(
+  plan0001, "SYN-ETC-0001",
+  cifrar("Rivaroxabán"), cifrar("10 mg"), cifrar("cada 24 horas"), cifrar("35 días"),
+  "10:00",
+  cifrar("Rivaroxabán 10 mg cada 24 horas por 35 días (tromboprofilaxis)."),
+);
+const plan0007 = nuevoId("PLN");
+insPlan.run(
+  plan0007, "SYN-ETC-0007",
+  cifrar("Rivaroxabán"), cifrar("10 mg"), cifrar("cada 24 horas"), cifrar("35 días"),
+  "10:00",
+  cifrar("Rivaroxabán 10 mg cada 24 horas por 35 días (tromboprofilaxis)."),
+);
+materializarTomas();
 
 persistirMatriz(matriz());
 

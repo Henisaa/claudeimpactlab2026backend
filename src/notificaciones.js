@@ -69,6 +69,38 @@ const PLANTILLAS = {
     texto: (n) =>
       `Contigo · el seguimiento de ${n.toLowerCase()} fue derivado a su establecimiento de salud por falta de contacto.`,
   },
+  RECORDATORIO_MEDICACION: {
+    plantilla: "contigo_apoyo_medicacion",
+    texto: (n, p) =>
+      `Contigo · hoy hay una medicación programada para las ${p?.horaLocal ?? "hora indicada"}. ` +
+      `Es un buen momento para acompañar a ${n.toLowerCase()} a tomar la foto en la app: ${ENLACE_APP}/paciente/medicacion`,
+  },
+  MEDICACION_VERIFICADA: {
+    plantilla: "contigo_apoyo_medicacion",
+    texto: (n, p) => {
+      const desenlace = {
+        coincide: "coincide con el plan registrado",
+        no_coincide: "no coincide con el plan registrado y quedó marcada para revisión del equipo de salud",
+        no_se_puede_confirmar: "no se pudo confirmar con la foto",
+      }[p?.resultado] ?? "fue procesada";
+      return (
+        `Contigo · la foto de la medicación de las ${p?.horaLocal ?? "hoy"} ${desenlace}. ` +
+        `Ver el detalle en la app: ${ENLACE_APP}/cuidador/medicacion`
+      );
+    },
+  },
+  MEDICACION_NO_TOMADA: {
+    plantilla: "contigo_apoyo_medicacion",
+    texto: (n, p) =>
+      `Contigo · ${n.toLowerCase()} marcó que no tomó una de sus medicaciones de hoy (${p?.horaLocal ?? "hora indicada"}). ` +
+      `Ver en la app: ${ENLACE_APP}/cuidador/medicacion`,
+  },
+  MEDICACION_SIN_RESPUESTA: {
+    plantilla: "contigo_apoyo_medicacion",
+    texto: (n, p) =>
+      `Contigo · no llegó la foto de la medicación de las ${p?.horaLocal ?? "hoy"}. ` +
+      `Si puede, acompáñela a tomarla en la app: ${ENLACE_APP}/paciente/medicacion`,
+  },
 };
 
 /**
@@ -79,11 +111,11 @@ const PLANTILLAS = {
  */
 const SUJETO = "La persona que usted acompaña";
 
-export function redactarMensaje(evento, pacienteId) {
+export function redactarMensaje(evento, pacienteId, payload = null) {
   const plantilla = PLANTILLAS[evento];
   if (!plantilla) return null;
   void pacienteId;
-  return { plantilla: plantilla.plantilla, texto: plantilla.texto(SUJETO) };
+  return { plantilla: plantilla.plantilla, texto: plantilla.texto(SUJETO, payload) };
 }
 
 /** Destinatario: el teléfono declarado por la persona de apoyo autorizada. */
@@ -128,7 +160,7 @@ export async function procesarOutbox({ pacienteId = null, limite = 50 } = {}) {
       continue;
     }
 
-    const mensaje = redactarMensaje(n.evento, n.paciente_id);
+    const mensaje = redactarMensaje(n.evento, n.paciente_id, JSON.parse(n.payload ?? "null"));
     if (!mensaje) {
       marcar("cancelada", `Evento sin plantilla redactada: ${n.evento}.`);
       resultado.canceladas += 1;

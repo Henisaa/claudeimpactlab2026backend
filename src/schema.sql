@@ -192,3 +192,71 @@ CREATE TABLE IF NOT EXISTS oposiciones_tratamiento (
 CREATE INDEX IF NOT EXISTS idx_alertas_paciente ON alertas(paciente_id);
 CREATE INDEX IF NOT EXISTS idx_seguimientos_paciente ON seguimientos(paciente_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_estado ON notificaciones_outbox(estado);
+
+-- --- Prototipo: medicación fotografiada y verificada -------------------------
+-- Versión mínima del plan de medicación para el pitch: una fila por indicación
+-- aprobada, una fila por toma esperada, una fila por fotografía (evidencia) y
+-- una fila por comparación. El horario explícito lo escribe/aprueba un
+-- profesional; el sistema nunca lo infiere de "cada 8 horas".
+
+CREATE TABLE IF NOT EXISTS planes_medicacion (
+  id TEXT PRIMARY KEY,
+  paciente_id TEXT NOT NULL REFERENCES pacientes(id),
+  medicamento_nombre TEXT NOT NULL,
+  concentracion TEXT,
+  frecuencia_texto TEXT,
+  duracion_texto TEXT,
+  horario_local TEXT,
+  zona_horaria TEXT NOT NULL DEFAULT 'America/Santiago',
+  ventana_minutos INTEGER NOT NULL DEFAULT 15,
+  cita_original TEXT,
+  estado TEXT NOT NULL DEFAULT 'pendiente_revision'
+    CHECK (estado IN ('borrador','pendiente_revision','activo','suspendido')),
+  aprobado_por TEXT REFERENCES profesionales(id),
+  aprobado_en TEXT,
+  version TEXT NOT NULL DEFAULT '1',
+  creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS tomas_programadas (
+  id TEXT PRIMARY KEY,
+  plan_medicacion_id TEXT NOT NULL REFERENCES planes_medicacion(id),
+  programada_para_utc TEXT NOT NULL,
+  fecha_local TEXT NOT NULL,
+  hora_local TEXT NOT NULL,
+  zona_horaria TEXT NOT NULL DEFAULT 'America/Santiago',
+  estado TEXT NOT NULL DEFAULT 'pendiente'
+    CHECK (estado IN ('pendiente','recordatorio_enviado','foto_recibida','verificacion_pendiente','coincide','no_coincide','no_se_puede_confirmar','sin_respuesta','revisada','cancelada')),
+  ventana_inicio TEXT,
+  ventana_fin TEXT,
+  intentos_recordatorio INTEGER NOT NULL DEFAULT 0,
+  clave_idempotencia TEXT NOT NULL UNIQUE,
+  declaracion TEXT CHECK (declaracion IN ('tomada','no_tomada')),
+  creada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS evidencias_medicacion (
+  id TEXT PRIMARY KEY,
+  toma_programada_id TEXT NOT NULL REFERENCES tomas_programadas(id),
+  ruta_archivo_cifrado TEXT NOT NULL,
+  hash_archivo TEXT,
+  capturada_en TEXT NOT NULL DEFAULT (datetime('now')),
+  capturada_por TEXT,
+  estado_procesamiento TEXT NOT NULL DEFAULT 'procesando'
+);
+CREATE TABLE IF NOT EXISTS verificaciones_medicacion (
+  id TEXT PRIMARY KEY,
+  evidencia_id TEXT NOT NULL REFERENCES evidencias_medicacion(id),
+  nombre_observado TEXT,
+  concentracion_observada TEXT,
+  texto_original_observado TEXT,
+  confianza_vision TEXT,
+  resultado_comparacion TEXT NOT NULL
+    CHECK (resultado_comparacion IN ('coincide','no_coincide','no_se_puede_confirmar','conflicto','pendiente_revision')),
+  motivo TEXT,
+  requiere_revision_profesional INTEGER NOT NULL DEFAULT 1,
+  revisado_por TEXT,
+  revisado_en TEXT,
+  creada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tomas_plan ON tomas_programadas(plan_medicacion_id);
+CREATE INDEX IF NOT EXISTS idx_tomas_estado ON tomas_programadas(estado);
+CREATE INDEX IF NOT EXISTS idx_tomas_programada ON tomas_programadas(programada_para_utc);

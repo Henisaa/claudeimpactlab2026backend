@@ -22,6 +22,8 @@ import { rutasDerechos } from "./rutas/derechos.js";
 import { rutasAdmin } from "./rutas/admin.js";
 import { rutasCrud } from "./rutas/crud.js";
 import { rutasCpo24 } from "./rutas/cpo24.js";
+import { rutasMedicacion } from "./rutas/medicacion.js";
+import { arrancarWorkerMedicacion } from "./workers/medicacion.js";
 
 export const app = express();
 const intentos = new Map();
@@ -51,7 +53,7 @@ app.post("/api/v1/auth/login", (req, res) => {
   res.json(sesion);
 });
 
-app.use("/api/v1", autenticar, auditarLecturas, rutasBaul, rutasSeguimiento, rutasDerechos, rutasCrud, rutasCpo24, rutasAdmin);
+app.use("/api/v1", autenticar, auditarLecturas, rutasBaul, rutasSeguimiento, rutasDerechos, rutasCrud, rutasCpo24, rutasMedicacion, rutasAdmin);
 
 // Manejador de errores: mensajes claros, sin filtrar detalles internos.
 app.use((err, _req, res, _next) => {
@@ -81,4 +83,10 @@ export function iniciarServidor() {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) iniciarServidor();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  iniciarServidor();
+  // En el prototipo el worker vive dentro del mismo proceso y solo en modo
+  // demo: materializa tomas, enciende recordatorios y cierra ventanas. En
+  // producción sería un proceso separado (ver plan del prototipo).
+  if (process.env.DEMO_MODE === "true") arrancarWorkerMedicacion();
+}
