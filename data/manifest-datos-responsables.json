@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "manifest_id": "datos-responsables-linea-03-v1",
+  "fecha_corte": "2026-08-05",
+  "alcance": "demo",
+  "clasificacion_global": "casos_individuales_sinteticos_mas_fuentes_publicas",
+  "politica": {
+    "pacientes_reales": false,
+    "pii_permitida": false,
+    "reidentificacion_permitida": false,
+    "prefijo_expedientes": "SYN-ETC-",
+    "datos_deis_rem_crudos_en_runtime": false,
+    "uso_clinico_autonomo": false
+  },
+  "artefactos": [
+    {
+      "id": "synthetic_patient_cases",
+      "ruta": "src/seed.js",
+      "clasificacion": "sintetico",
+      "uso": "ocho casos ficticios para seed y demo",
+      "sha256": "30764B7C2F573CB94E6126419410CF8C9108C1BCD54567CFD860B10863D56107"
+    },
+    {
+      "id": "synthetic_expected_outcomes",
+      "ruta": "data/casos-esperados.json",
+      "clasificacion": "sintetico",
+      "uso": "desenlaces esperados para pruebas",
+      "sha256": "1FFDA3FE1B282178AD857F917D2C1A5F6B004E3514CE9D6A027B905BE18CC289"
+    },
+    {
+      "id": "clinical_matrix_etc",
+      "ruta": "data/matriz-etc.json",
+      "clasificacion": "configuracion_clinica_versionada",
+      "uso": "hitos, sintomas y reglas; filas sin fuente permanecen bloqueadas",
+      "sha256": "027A41C9370FF85174F6D0BAA698FBF9C1014A807ED311EE38637467966CC997"
+    },
+    {
+      "id": "synthetic_frontend_case",
+      "ruta": "../claudeimpactlab2026frontend/src/lib/caso-sintetico.ts",
+      "clasificacion": "sintetico",
+      "uso": "fallback visual y prueba local",
+      "sha256": "860C71C159216B0C18DD003D5A892DBB46B0AAE18DBC60DD762F81D5CBACCA48"
+    },
+    {
+      "id": "frontend_clinical_matrix",
+      "ruta": "../claudeimpactlab2026frontend/src/lib/matriz-etc.ts",
+      "clasificacion": "configuracion_clinica_versionada",
+      "uso": "fuente de verdad de la matriz exportada al backend",
+      "sha256": "963B47732CF137C7D7007F08AF9F0E0A79724553564D8CDB9CA7F055654DE12E"
+    },
+    {
+      "id": "curated_public_notes_data",
+      "ruta": "../claudeimpactlab2026obsidian/Data_Real_Salud_Linea_03.txt",
+      "clasificacion": "nota_curada_del_proyecto",
+      "uso": "contexto y referencias; no es una ficha clínica",
+      "sha256": "F9F765EEC782D78A59BC36DB49E2DF7C4A3AC5AAA54D2DB8760571FF6FF8CC6E"
+    },
+    {
+      "id": "curated_public_notes_minsal_deis",
+      "ruta": "../claudeimpactlab2026obsidian/Datos_Linea_03_MINSAL_DEIS.txt",
+      "clasificacion": "nota_curada_del_proyecto",
+      "uso": "contexto y referencias; no es un dataset individual",
+      "sha256": "54AFB967F3F0DB2B5875BB6A843B860CBAE6A5DA390086CCF9FC70FBFEF28D71"
+    },
+    {
+      "id": "official_etc_guideline_snapshot",
+      "ruta": "../claudeimpactlab2026obsidian/RE_GPC-Endoprotesis_2020_v7.pdf",
+      "clasificacion": "fuente_publica_oficial",
+      "uso": "respaldo clínico local; conservar atribución MINSAL",
+      "sha256": "1887C102C4DFD3E64CB867C54D04B39025F21BD9B7AE6698DCF60C641BBABDD5"
+    }
+  ],
+  "fuentes_publicas": [
+    {
+      "id": "diprece_grade_etc",
+      "institucion": "DIPRECE / MINSAL",
+      "url": "https://diprece.minsal.cl/garantias-explicitas-en-salud-auge-o-ges/endoprotesis-total-de-cadera-en-personas-de-65-anos-y-mas-con-artrosis-de-cadera-con-limitacion-funcional-severa/recomendaciones-grade/",
+      "fecha_consulta": "2026-08-05",
+      "uso": "recomendaciones clínicas específicas de ETC"
+    },
+    {
+      "id": "diprece_description_etc",
+      "institucion": "DIPRECE / MINSAL",
+      "url": "https://diprece.minsal.cl/garantias-explicitas-en-salud-auge-o-ges/endoprotesis-total-de-cadera-en-personas-de-65-anos-y-mas-con-artrosis-de-cadera-con-limitacion-funcional-severa/descripcion-y-epidemiologia/",
+      "fecha_consulta": "2026-08-05",
+      "uso": "contexto poblacional y cifra de 3.762 atenciones GES"
+    },
+    {
+      "id": "minsal_process",
+      "institucion": "MINSAL",
+      "url": "https://www.minsal.cl/wp-content/uploads/2024/01/2023.10.25_OT-PROCESO-QUIRURGICOf61123.pdf",
+      "fecha_consulta": "2026-08-05",
+      "uso": "vigilancia postoperatoria general"
+    },
+    {
+      "id": "minsal_urgency",
+      "institucion": "MINSAL",
+      "url": "https://www.minsal.cl/servicios-de-urgencia-cuando-asistir-a-un-recinto-de-atencion-primaria-o-a-un-hospital/",
+      "fecha_consulta": "2026-08-05",
+      "uso": "criterios generales de urgencia"
+    },
+    {
+      "id": "salud_responde_cpo24",
+      "institucion": "Salud Responde / MINSAL",
+      "url": "https://saludresponde.minsal.cl/contacto-pacientes-post-operados-cpo-24/",
+      "fecha_consulta": "2026-08-05",
+      "uso": "contacto postoperatorio a las 24 horas"
+    }
+  ],
+  "no_usados_en_runtime": [
+    "Bases DEIS de egresos hospitalarios",
+    "Archivos crudos REM",
+    "Registros individuales de pacientes",
+    "Fotografias o documentos de personas reales"
+  ]
+}

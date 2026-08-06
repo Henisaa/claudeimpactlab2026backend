@@ -190,6 +190,9 @@ export async function extraerDocumento(imagenes, textoDocumento = "") {
 const SYSTEM_RAG = `Eres el asistente del "baúl" de una persona mayor operada de la cadera
 (endoprótesis total de cadera). Respondes preguntas del paciente o su cuidador usando
 ÚNICAMENTE los fragmentos recuperados que se te entregan, numerados [1], [2], etc.
+Los fragmentos pueden ser documentos del paciente, fuentes oficiales, notas curatoriales
+del proyecto o filas de la matriz clínica. No presentes una nota del proyecto como si
+fuera una publicación oficial.
 
 Reglas que no puedes romper:
 
@@ -211,7 +214,9 @@ Reglas que no puedes romper:
 7. Habla en lenguaje simple, frases cortas, tono cálido y respetuoso, en español de Chile.
    La persona que lee tiene 65 años o más. Nada de jerga clínica sin explicarla.
 8. Distingue siempre entre "sus documentos" (lo que el equipo que la operó escribió para
-   ella) y "las guías oficiales" (información general del Ministerio de Salud).`;
+   ella), "las fuentes oficiales" (información publicada por una institución) y "las
+   notas del proyecto" (material curado por el equipo). Una nota del proyecto no es una
+   fuente oficial por sí sola.`;
 
 const ESQUEMA_RAG = {
   type: "object",
@@ -251,7 +256,7 @@ export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
   const listado = fragmentosSeguros
     .map(
       (f, i) =>
-        `[${i + 1}] (${f.tipo === "documento_paciente" ? "documento del paciente" : "fuente oficial"} — ${f.fuente}${f.seccion ? `, ${f.seccion}` : ""})\n${f.contenido}`,
+        `[${i + 1}] (${etiquetaFragmento(f.tipo)} — ${f.fuente}${f.seccion ? `, ${f.seccion}` : ""})\n${f.contenido}`,
     )
     .join("\n\n");
 
@@ -292,6 +297,21 @@ Pregunta: ${preguntaSegura}`,
       tokensSalida: respuesta.usage.output_tokens,
     },
   };
+}
+
+function etiquetaFragmento(tipo) {
+  switch (tipo) {
+    case "documento_paciente":
+      return "documento del paciente";
+    case "nota_proyecto":
+      return "nota curada del proyecto";
+    case "matriz_clinica":
+      return "matriz clínica con fuente";
+    case "guia_oficial":
+      return "fuente oficial";
+    default:
+      return "fuente no clasificada";
+  }
 }
 
 function mockExtraccion(texto = "", textoSeguro = "") {

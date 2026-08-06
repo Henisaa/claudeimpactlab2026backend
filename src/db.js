@@ -37,9 +37,9 @@ db.exec(readFileSync(schemaPath, "utf8"));
 db.exec(`
 CREATE TABLE IF NOT EXISTS rag_chunks (
   id             TEXT PRIMARY KEY,
-  paciente_id    TEXT REFERENCES pacientes(id),  -- NULL = corpus oficial compartido
+  paciente_id    TEXT REFERENCES pacientes(id),  -- NULL = corpus compartido
   documento_id   TEXT REFERENCES documentos_clinicos(id),
-  tipo           TEXT NOT NULL CHECK (tipo IN ('documento_paciente','guia_oficial','matriz_clinica')),
+  tipo           TEXT NOT NULL CHECK (tipo IN ('documento_paciente','guia_oficial','nota_proyecto','matriz_clinica')),
   fuente         TEXT NOT NULL,                  -- nombre legible del documento de origen
   url_fuente     TEXT,
   seccion        TEXT,
@@ -53,6 +53,37 @@ CREATE VIRTUAL TABLE IF NOT EXISTS rag_fts USING fts5(
   tokenize = "unicode61 remove_diacritics 2"
 );
 `);
+
+// La primera versión del prototipo no distinguía las notas curatoriales de las
+// fuentes oficiales. Reconstruir solo esta tabla permite actualizar una base
+// existente sin perder chunks ni confundir la procedencia en el RAG.
+const sqlRagChunks = db
+  .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'rag_chunks'")
+  .get()?.sql ?? "";
+if (!sqlRagChunks.includes("nota_proyecto")) {
+  db.exec("DROP INDEX IF EXISTS idx_rag_chunks_paciente");
+  db.transaction(() => {
+    db.exec("ALTER TABLE rag_chunks RENAME TO rag_chunks_legacy");
+    db.exec(`
+      CREATE TABLE rag_chunks (
+        id             TEXT PRIMARY KEY,
+        paciente_id    TEXT REFERENCES pacientes(id),
+        documento_id   TEXT REFERENCES documentos_clinicos(id),
+        tipo           TEXT NOT NULL CHECK (tipo IN ('documento_paciente','guia_oficial','nota_proyecto','matriz_clinica')),
+        fuente         TEXT NOT NULL,
+        url_fuente     TEXT,
+        seccion        TEXT,
+        contenido      TEXT NOT NULL,
+        fecha_indexado TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO rag_chunks (id, paciente_id, documento_id, tipo, fuente, url_fuente, seccion, contenido, fecha_indexado)
+      SELECT id, paciente_id, documento_id, tipo, fuente, url_fuente, seccion, contenido, fecha_indexado
+      FROM rag_chunks_legacy;
+      DROP TABLE rag_chunks_legacy;
+      CREATE INDEX idx_rag_chunks_paciente ON rag_chunks(paciente_id);
+    `);
+  })();
+}
 
 const columnasTraz = db
   .prepare("SELECT name FROM pragma_table_info('trazabilidad_extraccion')")

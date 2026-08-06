@@ -1,7 +1,7 @@
 /**
  * Seed: los 8 casos sintéticos de BACKEND_IDEALIZADO §13.2, usuarios demo,
- * consentimientos, documentos sintéticos confirmados y el corpus RAG oficial
- * (fuentes MINSAL/DEIS del vault + matriz clínica).
+ * consentimientos, documentos sintéticos confirmados y el corpus RAG
+ * clasificado por procedencia (notas del proyecto + matriz con fuentes).
  *
  * Todo es ficticio: nombres, comunas, establecimientos, profesionales y
  * "recetas". Ningún dato corresponde a una persona real.
@@ -280,23 +280,23 @@ for (const c of CASOS) {
   });
 }
 
-// --- Corpus RAG oficial ------------------------------------------------------
+// --- Corpus RAG compartido ---------------------------------------------------
 
 const FUENTES_VAULT = [
-  ["Data_Real_Salud_Linea_03.txt", "Paquete de fuentes oficiales MINSAL/DEIS — Línea 03"],
-  ["Datos_Linea_03_MINSAL_DEIS.txt", "Datos MINSAL/DEIS — Línea 03"],
-  ["Linea_03_Continuidad_Medicina_de_Precision.md", "Línea 03 — Continuidad y Medicina de Precisión (documento del proyecto)"],
+  { archivo: "Data_Real_Salud_Linea_03.txt", nombre: "Nota curada del proyecto — fuentes públicas Línea 03" },
+  { archivo: "Datos_Linea_03_MINSAL_DEIS.txt", nombre: "Nota curada del proyecto — datos MINSAL/DEIS Línea 03" },
+  { archivo: "Linea_03_Continuidad_Medicina_de_Precision.md", nombre: "Nota curada del proyecto — Línea 03" },
 ];
-let chunksOficiales = 0;
-for (const [archivo, nombre] of FUENTES_VAULT) {
+let chunksCompartidos = 0;
+for (const { archivo, nombre } of FUENTES_VAULT) {
   const ruta = path.join(VAULT, archivo);
   if (!existsSync(ruta)) {
     console.warn(`(aviso) No se encontró ${ruta}; ese corpus no se indexa.`);
     continue;
   }
-  chunksOficiales += indexar({
+  chunksCompartidos += indexar({
     texto: readFileSync(ruta, "utf8"),
-    tipo: "guia_oficial",
+    tipo: "nota_proyecto",
     fuente: nombre,
   }).length;
 }
@@ -304,7 +304,7 @@ for (const [archivo, nombre] of FUENTES_VAULT) {
 // La matriz clínica también responde preguntas: solo sus filas con fuente.
 const m = matriz();
 for (const s of m.sintomasEsperados.filter((x) => x.estado === "vigente" && x.fuente)) {
-  chunksOficiales += indexar({
+  chunksCompartidos += indexar({
     texto: `${s.descripcion}\n${s.mensajeNormalizador}`,
     tipo: "matriz_clinica",
     fuente: `Matriz clínica ${m.id} — síntoma esperado (${s.fuente.institucion})`,
@@ -313,7 +313,7 @@ for (const s of m.sintomasEsperados.filter((x) => x.estado === "vigente" && x.fu
   }).length;
 }
 for (const s of m.senalesAlarma.filter((x) => x.estado === "vigente" && x.fuente)) {
-  chunksOficiales += indexar({
+  chunksCompartidos += indexar({
     texto: `Señal de alarma (${s.color}): ${s.descripcion} Qué hacer: ${s.accion}`,
     tipo: "matriz_clinica",
     fuente: `Matriz clínica ${m.id} — señal de alarma (${s.fuente.institucion})`,
@@ -357,5 +357,5 @@ console.log(`Seed listo:
   consentimientos:      ${n("consentimientos")}
   documentos:           ${n("documentos_clinicos")}
   campos trazables:     ${n("trazabilidad_extraccion")}
-  chunks RAG:           ${n("rag_chunks")} (${chunksOficiales} oficiales)
+  chunks RAG:           ${n("rag_chunks")} (${chunksCompartidos} compartidos)
 Usuarios demo (clave demo1234): paciente@demo, cuidador@demo, profesional@demo, admin@demo`);

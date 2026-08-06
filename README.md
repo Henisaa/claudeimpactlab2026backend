@@ -14,7 +14,7 @@ las migraciones idempotentes.
 ```bash
 npm install
 npm run matriz   # exporta la matriz clínica desde el frontend (fuente de verdad)
-npm run seed     # 8 casos sintéticos + usuarios demo + corpus RAG oficial
+npm run seed     # 8 casos sintéticos + usuarios demo + corpus RAG clasificado
 npm start        # http://localhost:4000
 ```
 
@@ -41,12 +41,13 @@ sola fuente de verdad.
 ## El RAG del baúl
 
 Recuperación léxica local (SQLite FTS5, BM25, sin servicio de embeddings)
-sobre dos colecciones que la respuesta siempre distingue:
+sobre colecciones que la respuesta siempre distingue:
 
 1. **Documentos del paciente** — solo lo que una persona confirmó contra el
    papel. Un borrador extraído por Claude no entra al índice.
-2. **Corpus oficial** — fuentes MINSAL/DEIS del vault + filas de la matriz
-   clínica que tienen fuente.
+2. **Fuentes y notas compartidas** — la matriz conserva sus fuentes oficiales;
+   las notas curatoriales del vault se etiquetan como notas del proyecto y no se
+   presentan como publicaciones oficiales.
 
 `POST /pacientes/:id/preguntar` recupera los mejores fragmentos y Claude
 (claude-sonnet-5) redacta en lenguaje simple **citando [n] cada afirmación**;
@@ -100,3 +101,6 @@ MOCK. Los campos sensibles y los archivos clínicos se cifran con AES-256-GCM;
 la clave debe venir de `ENCRYPTION_KEY` fuera del modo demo. Las limitaciones
 clínicas y las reglas aún bloqueadas están documentadas en
 `../claudeimpactlab2026obsidian/Backend_Correcciones_Implementadas.md`.
+
+El inventario de procedencia y hashes de los artefactos de la demo está en
+`data/manifest-datos-responsables.json`.

@@ -4,8 +4,8 @@
  *
  *   1. Los documentos del propio paciente (lo extraído y confirmado de sus
  *      fotos: recetas, informes de alta, indicaciones).
- *   2. El corpus oficial compartido (fuentes MINSAL/DEIS del vault del
- *      proyecto y la matriz clínica con sus fuentes).
+ *   2. El corpus compartido, separado por procedencia: fuentes oficiales,
+ *      notas curatoriales del proyecto y matriz clínica con sus fuentes.
  *
  * La generación (responder en lenguaje simple citando estos chunks) vive en
  * claude.js. Este archivo no llama a ningún modelo: indexa y recupera.
@@ -101,8 +101,8 @@ function consultaFts(pregunta) {
 
 /**
  * Recupera los mejores fragmentos para una pregunta: los del paciente y los
- * del corpus oficial, por separado, para que la respuesta distinga siempre
- * "sus documentos" de "las guías oficiales".
+ * del corpus compartido, por separado, para que la respuesta distinga siempre
+ * "sus documentos", fuentes oficiales y notas curatoriales del proyecto.
  */
 export function buscar(pregunta, pacienteId, topK = 6) {
   const consulta = consultaFts(pregunta);

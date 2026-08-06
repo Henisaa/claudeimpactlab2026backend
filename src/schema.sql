@@ -155,7 +155,8 @@ CREATE TABLE IF NOT EXISTS auditoria_acceso (
 );
 CREATE TABLE IF NOT EXISTS rag_chunks (
   id TEXT PRIMARY KEY, paciente_id TEXT REFERENCES pacientes(id), documento_id TEXT REFERENCES documentos_clinicos(id),
-  tipo TEXT NOT NULL, fuente TEXT NOT NULL, url_fuente TEXT, seccion TEXT, contenido TEXT NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('documento_paciente','guia_oficial','nota_proyecto','matriz_clinica')),
+  fuente TEXT NOT NULL, url_fuente TEXT, seccion TEXT, contenido TEXT NOT NULL,
   fecha_indexado TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS rag_fts USING fts5(chunk_id UNINDEXED, contenido,
