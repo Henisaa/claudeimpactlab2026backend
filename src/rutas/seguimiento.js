@@ -49,9 +49,9 @@ rutasSeguimiento.post(
 
     const m = matriz();
     const dia = diaRelativo(evento.fecha_alta);
-    const validacion = validarRespuestas(m, respuestas, dia);
-    if (validacion.error) return res.status(400).json({ error: validacion.error });
     const evaluacion = evaluar(m, respuestas, dia);
+    const validacion = validarRespuestas(m, respuestas, dia, evaluacion.color === "rojo");
+    if (validacion.error) return res.status(400).json({ error: validacion.error });
 
     // Mapeo de las respuestas del check-in a las columnas de `seguimientos`.
     const HERIDA = { igual: "normal", mas_roja: "inflamada", liquido: "con_exudado" };
@@ -236,13 +236,18 @@ function eventoActual(pacienteId) {
     .get(pacienteId);
 }
 
-function validarRespuestas(m, respuestas, dia) {
+function validarRespuestas(m, respuestas, dia, emergencia = false) {
   const preguntas = preguntasDelDia(m, dia);
   const permitidas = new Set([...preguntas.map((p) => p.id), "contacto24h", "nauseas", "vomitos", "fiebre", "confusion", "sangrado", "alimentacion", "apoyoCuidador", "controlAgendado", "dolorNumerico"]);
   const desconocida = Object.keys(respuestas).find((clave) => !permitidas.has(clave));
   if (desconocida) return { error: `Clave de respuesta no permitida: ${desconocida}.` };
   for (const pregunta of preguntas) {
-    if (respuestas[pregunta.id] === undefined) return { error: `Falta responder: ${pregunta.id}.` };
+    if (respuestas[pregunta.id] === undefined) {
+      // Un check-in cortado por una señal roja se registra igual: la alerta
+      // no se retiene por preguntas que quedaron sin responder.
+      if (emergencia) continue;
+      return { error: `Falta responder: ${pregunta.id}.` };
+    }
     if (pregunta.id === "dolor" && typeof respuestas.dolor === "number") {
       if (!Number.isInteger(respuestas.dolor) || respuestas.dolor < 0 || respuestas.dolor > 10) return { error: "El dolor numérico debe ser un entero entre 0 y 10." };
       continue;
