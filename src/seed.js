@@ -143,8 +143,11 @@ const insCuidador = db.prepare(
   `INSERT INTO cuidadores (id, paciente_id, nombre_ficticio, relacion, permisos, consentimiento_paciente, fecha_autorizacion, telefono_contacto)
    VALUES (?, ?, ?, ?, '{"ver_expediente":true,"registrar_sintomas":true}', 1, datetime('now'), ?)`,
 );
-insCuidador.run("CUI-0001", "SYN-ETC-0007", "Carmen T. (ficticio)", "hija", cifrar("+56900000001"));
-insCuidador.run("CUI-0002", "SYN-ETC-0001", "Pablo G. (ficticio)", "hijo", cifrar("+56900000002"));
+// DEMO_TELEFONO_APOYO permite apuntar los avisos a un teléfono real para
+// probar el canal en vivo. Sin esa variable se usan números de ficción.
+const telefonoApoyo = process.env.DEMO_TELEFONO_APOYO?.trim();
+insCuidador.run("CUI-0001", "SYN-ETC-0007", "Carmen T. (ficticio)", "hija", cifrar(telefonoApoyo || "+56900000001"));
+insCuidador.run("CUI-0002", "SYN-ETC-0001", "Pablo G. (ficticio)", "hijo", cifrar(telefonoApoyo || "+56900000002"));
 
 const insUsuario = db.prepare(
   `INSERT INTO usuarios (id, username, password_hash, tipo_usuario, paciente_id, cuidador_id, profesional_id)
