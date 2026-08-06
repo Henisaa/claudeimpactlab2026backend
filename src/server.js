@@ -27,7 +27,20 @@ import { arrancarWorkerMedicacion } from "./workers/medicacion.js";
 
 export const app = express();
 const intentos = new Map();
-app.use(cors({ origin: ["http://localhost:3000", "http://127.0.0.1:3000"] }));
+const origenesPermitidos = new Set(
+  (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://127.0.0.1:3000")
+    .split(",")
+    .map((origen) => origen.trim())
+    .filter(Boolean),
+);
+app.use(
+  cors({
+    origin: (origen, callback) => {
+      // Las solicitudes sin Origin (curl, health checks) no necesitan CORS.
+      callback(null, !origen || origenesPermitidos.has(origen));
+    },
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.use((req, res, next) => {
@@ -71,14 +84,14 @@ export function iniciarServidor() {
   const cert = process.env.TLS_CERT_PATH;
   const key = process.env.TLS_KEY_PATH;
   if (cert && key) {
-    return https.createServer({ key: readFileSync(key), cert: readFileSync(cert) }, app).listen(PUERTO, () => {
+    return https.createServer({ key: readFileSync(key), cert: readFileSync(cert) }, app).listen(PUERTO, "0.0.0.0", () => {
       console.log(`Backend ETC escuchando en https://localhost:${PUERTO}`);
     });
   }
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_HTTP !== "true") {
     throw new Error("TLS_CERT_PATH y TLS_KEY_PATH son obligatorias en producción.");
   }
-  return http.createServer(app).listen(PUERTO, () => {
+  return http.createServer(app).listen(PUERTO, "0.0.0.0", () => {
     console.warn(`Backend ETC escuchando en http://localhost:${PUERTO} (solo desarrollo)`);
   });
 }

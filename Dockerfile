@@ -18,7 +18,6 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=development \
-    PORT=4000 \
     DEMO_MODE=true \
     CLAUDE_MOCK=true \
     JWT_SECRET=contigo-demo-secret \
