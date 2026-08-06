@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS matriz_clinica (
     CHECK (estado_validacion IN ('borrador','pendiente_validacion','validada','caducada')),
   revisado_por TEXT REFERENCES profesionales(id)
 );
+CREATE TABLE IF NOT EXISTS matriz_versiones (
+  id TEXT PRIMARY KEY, version TEXT NOT NULL UNIQUE, contenido TEXT NOT NULL,
+  fuente TEXT NOT NULL, fecha_fuente TEXT, estado_validacion TEXT NOT NULL DEFAULT 'pendiente_validacion',
+  activa INTEGER NOT NULL DEFAULT 0, creada_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS preferencias_accesibilidad (
   id TEXT PRIMARY KEY, paciente_id TEXT NOT NULL REFERENCES pacientes(id),
   letra_grande INTEGER NOT NULL DEFAULT 1, alto_contraste INTEGER NOT NULL DEFAULT 1,

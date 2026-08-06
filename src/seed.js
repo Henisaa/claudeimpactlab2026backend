@@ -15,6 +15,7 @@ import { db, nuevoId, RUTA_DATA } from "./db.js";
 import { hashClave } from "./auth.js";
 import { indexar } from "./rag.js";
 import { matriz, persistirMatriz } from "./motor.js";
+import { cifrar, cifrarJson } from "./seguridad.js";
 
 const VAULT = process.env.VAULT_DIR ?? path.join(RUTA_DATA, "..", "..", "claudeimpactlab2026obsidian");
 
@@ -35,7 +36,7 @@ for (const tabla of [
   "documentos_clinicos", "alertas", "hitos_seguimiento", "seguimientos",
   "conciliacion_farmacologica", "indicaciones_alta", "eventos_quirurgicos",
   "usuarios", "cuidadores", "profesionales", "pacientes",
-  "preferencias_accesibilidad", "matriz_clinica", "establecimientos",
+  "preferencias_accesibilidad", "matriz_versiones", "matriz_clinica", "establecimientos",
 ]) {
   db.exec(`DELETE FROM ${tabla}`);
 }
@@ -72,7 +73,7 @@ const CASOS = [
 
 const insPaciente = db.prepare(
   `INSERT INTO pacientes (id, nombre_ficticio, rango_edad, sexo, comuna_ficticia, region, tipo_apoyo, consentimiento_activo)
-   VALUES (?, ?, ?, ?, 'Talagante', 'Metropolitana', ?, 1)`,
+  VALUES (?, ?, ?, ?, ?, 'Metropolitana', ?, 1)`,
 );
 const insEvento = db.prepare(
   `INSERT INTO eventos_quirurgicos
@@ -84,7 +85,7 @@ const insIndicacion = db.prepare(
   `INSERT INTO indicaciones_alta
      (id, evento_quirurgico_id, medicamentos, curacion_herida, restricciones_fisicas,
       alimentacion, signos_alarma, canal_contacto, fecha_proximo_control, fuente, profesional_indica_id)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'informe de alta sintético', 'PRO-0001')`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'informe de alta sintético', 'PRO-0001')`,
 );
 
 // Receta sintética estándar del caso índice (el ejemplo de rivaroxabán viene
@@ -103,7 +104,7 @@ const SIGNOS_ALARMA = JSON.stringify([
 
 const eventos = {};
 for (const c of CASOS) {
-  insPaciente.run(c.id, c.nombre, c.edad, c.sexo, c.apoyo);
+  insPaciente.run(c.id, cifrar(c.nombre), c.edad, c.sexo, cifrar("Talagante"), c.apoyo);
   const eventoId = nuevoId("EVT");
   eventos[c.id] = eventoId;
   insEvento.run(
@@ -111,11 +112,11 @@ for (const c of CASOS) {
     diasAtras(c.altaHace + 3), diasAtras(c.altaHace + 4), diasAtras(c.altaHace), 3,
   );
   insIndicacion.run(
-    nuevoId("IND"), eventoId, MEDICAMENTOS,
-    "Mantener la herida limpia y seca. Curación en CESFAM cada 3 días. No mojar hasta el retiro de puntos.",
-    "No cruzar las piernas. No girar la pierna operada hacia adentro. No flexionar la cadera más de 90 grados. Usar silla alta y alzador de baño.",
-    "Alimentación habitual, abundante agua.",
-    SIGNOS_ALARMA, "Salud Responde 600 360 7777",
+    nuevoId("IND"), eventoId, cifrarJson(JSON.parse(MEDICAMENTOS)),
+    cifrar("Mantener la herida limpia y seca. Curación en CESFAM cada 3 días. No mojar hasta el retiro de puntos."),
+    cifrar("No cruzar las piernas. No girar la pierna operada hacia adentro. No flexionar la cadera más de 90 grados. Usar silla alta y alzador de baño."),
+    cifrar("Alimentación habitual, abundante agua."),
+    cifrarJson(JSON.parse(SIGNOS_ALARMA)), "Salud Responde 600 360 7777",
     diasAtras(c.altaHace - 12), // control ~D+12
   );
   db.prepare(
@@ -216,9 +217,8 @@ seg("SYN-ETC-0004", 7, { herida: "inflamada", dolor: 5, por: "cuidador" });
 const seg0005 = seg("SYN-ETC-0005", 2, { sangrado: 1, dolor: 6, derivacion: 1 });
 db.prepare(
   `INSERT INTO alertas (id, seguimiento_id, paciente_id, nivel, descripcion)
-   VALUES (?, ?, 'SYN-ETC-0005', 'roja',
-           'Situación de gravedad general: sangrado abundante reportado en check-in. — Regla r_emergencia (fuente: MINSAL, servicios de urgencia).')`,
-).run(nuevoId("ALR"), seg0005);
+   VALUES (?, ?, 'SYN-ETC-0005', 'roja', ?)`,
+ ).run(nuevoId("ALR"), seg0005, cifrar("Situación de gravedad general: sangrado abundante reportado en check-in. — Regla r_emergencia (fuente: MINSAL, servicios de urgencia)."));
 // 0006 paciente que no responde: hito contacto_24h pendiente, sin check-ins
 db.prepare(
   `INSERT INTO hitos_seguimiento (id, paciente_id, evento_quirurgico_id, tipo_hito, dia_objetivo, estado)
@@ -230,11 +230,11 @@ for (const d of [13, 14, 15]) seg("SYN-ETC-0007", d, { por: "cuidador", dolor: 2
 const seg0008 = seg("SYN-ETC-0008", 3, { dolor: 8, derivacion: 1 });
 db.prepare(
   `INSERT INTO alertas (id, seguimiento_id, paciente_id, nivel, descripcion, estado, atendida_por, fecha_atencion, accion_tomada)
-   VALUES (?, ?, 'SYN-ETC-0008', 'roja',
-           'Situación de gravedad general reportada en check-in. — Regla r_emergencia (fuente: MINSAL, servicios de urgencia).',
-           'resuelta', 'PRO-0001', datetime('now'),
-           'Derivación a servicio de urgencia coordinada con la familia (caso sintético).')`,
-).run(nuevoId("ALR"), seg0008);
+   VALUES (?, ?, 'SYN-ETC-0008', 'roja', ?,
+           'resuelta', 'PRO-0001', datetime('now'), ?)`,
+ ).run(nuevoId("ALR"), seg0008,
+   cifrar("Situación de gravedad general reportada en check-in. — Regla r_emergencia (fuente: MINSAL, servicios de urgencia)."),
+   cifrar("Derivación a servicio de urgencia coordinada con la familia (caso sintético)."));
 
 // hito contacto_24h cumplido para el resto
 for (const c of CASOS.filter((c) => c.id !== "SYN-ETC-0006")) {
@@ -268,7 +268,7 @@ for (const c of CASOS) {
   ];
   let texto = "";
   for (const [campo, valor, cita] of filas) {
-    insTrz.run(nuevoId("TRZ"), docId, campo, valor, cita);
+    insTrz.run(nuevoId("TRZ"), docId, campo, valor === null ? null : (campo === "medicamento" ? cifrar(valor) : cifrar(valor)), cifrar(cita));
     texto += `${campo}: ${cita}\n\n`;
   }
   indexar({

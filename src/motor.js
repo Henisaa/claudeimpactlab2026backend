@@ -16,9 +16,16 @@ let matrizCache = null;
 
 export function matriz() {
   if (!matrizCache) {
-    matrizCache = JSON.parse(readFileSync(RUTA_MATRIZ, "utf8"));
+    const persistida = db
+      .prepare("SELECT contenido FROM matriz_versiones WHERE activa = 1 ORDER BY creada_en DESC LIMIT 1")
+      .get();
+    matrizCache = persistida ? JSON.parse(persistida.contenido) : JSON.parse(readFileSync(RUTA_MATRIZ, "utf8"));
   }
   return matrizCache;
+}
+
+export function invalidarCacheMatriz() {
+  matrizCache = null;
 }
 
 /** Días transcurridos desde el alta. D+0 es el día del alta. */
@@ -153,6 +160,17 @@ export function persistirMatriz(m) {
     (id, procedimiento, categoria, contenido, nivel_alerta, dia_objetivo, fuente, url_fuente, fecha_fuente, version, estado_validacion)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const transaccion = db.transaction(() => {
+    db.prepare("UPDATE matriz_versiones SET activa = 0 WHERE activa = 1").run();
+    db.prepare(`INSERT OR REPLACE INTO matriz_versiones
+      (id, version, contenido, fuente, fecha_fuente, estado_validacion, activa)
+      VALUES (?, ?, ?, ?, ?, ?, 1)`).run(
+      `MAT-${m.id}`,
+      m.id,
+      JSON.stringify(m),
+      "Matriz clínica ETC — fuente de diseño pendiente de validación profesional",
+      m.fechaValidacion ?? null,
+      m.validadoPor ? "validada" : "pendiente_validacion",
+    );
     for (const fila of filas) {
       const fuente = fila.contenido.fuente;
       insert.run(fila.id, m.cirugia, fila.categoria, JSON.stringify(fila.contenido), fila.nivel,

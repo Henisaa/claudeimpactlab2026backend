@@ -32,6 +32,33 @@ export function descifrar(valor) {
   }
 }
 
+export function cifrarJson(valor) {
+  return valor === null || valor === undefined ? valor : cifrar(JSON.stringify(valor));
+}
+
+export function descifrarJson(valor, respaldo = null) {
+  if (valor === null || valor === undefined) return respaldo;
+  try {
+    return JSON.parse(descifrar(valor));
+  } catch {
+    return respaldo ?? valor;
+  }
+}
+
+export function descifrarCampos(fila, campos) {
+  if (!fila) return fila;
+  const copia = { ...fila };
+  for (const campo of campos) if (copia[campo] !== null && copia[campo] !== undefined) copia[campo] = descifrar(copia[campo]);
+  return copia;
+}
+
+export function descifrarJsonCampos(fila, campos) {
+  if (!fila) return fila;
+  const copia = { ...fila };
+  for (const campo of campos) copia[campo] = descifrarJson(copia[campo], []);
+  return copia;
+}
+
 const PII = [
   /\b\d{7,8}-?[0-9kK]\b/g,
   /\b(?:\+?56\s?)?9\s?\d{4}\s?\d{4}\b/g,
@@ -40,7 +67,11 @@ const PII = [
 
 export function detectarPII(texto) {
   const hallazgos = [];
-  for (const patron of PII) if (patron.test(String(texto))) hallazgos.push(patron.source);
+  for (const patron of PII) {
+    patron.lastIndex = 0;
+    if (patron.test(String(texto))) hallazgos.push(patron.source);
+    patron.lastIndex = 0;
+  }
   return hallazgos;
 }
 

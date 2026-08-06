@@ -7,10 +7,11 @@
 
 import { Router } from "express";
 import { createHash } from "node:crypto";
-import { unlinkSync } from "node:fs";
-import { db, nuevoId } from "../db.js";
+import { readdirSync, unlinkSync } from "node:fs";
+import { db, nuevoId, RUTA_UPLOADS } from "../db.js";
 import { auditar } from "../auditoria.js";
-import { exigirAccesoAPaciente } from "../auth.js";
+import { exigirAccesoAPaciente, soloRoles } from "../auth.js";
+import { cifrar, descifrar, descifrarCampos, descifrarJson } from "../seguridad.js";
 
 export const rutasDerechos = Router();
 
@@ -122,16 +123,17 @@ rutasDerechos.get(
     const exportado = {
       generadoEn: new Date().toISOString(),
       base: "Ley 21.719, derecho de acceso y portabilidad",
-      paciente: db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId),
+      paciente: descifrarCampos(db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId), ["nombre_ficticio", "comuna_ficticia"]),
       eventosQuirurgicos: de("SELECT * FROM eventos_quirurgicos WHERE paciente_id = ?"),
+      indicaciones: db.prepare("SELECT i.* FROM indicaciones_alta i JOIN eventos_quirurgicos e ON e.id = i.evento_quirurgico_id WHERE e.paciente_id = ?").all(pacienteId).map(descifrarIndicacion),
       conciliacionFarmacologica: de("SELECT * FROM conciliacion_farmacologica WHERE paciente_id = ?"),
       seguimientos: de("SELECT * FROM seguimientos WHERE paciente_id = ?"),
-      alertas: de("SELECT * FROM alertas WHERE paciente_id = ?"),
+      alertas: de("SELECT * FROM alertas WHERE paciente_id = ?").map(descifrarAlerta),
       documentos: de("SELECT * FROM documentos_clinicos WHERE paciente_id = ?"),
       camposExtraidos: de(
         `SELECT t.* FROM trazabilidad_extraccion t
          JOIN documentos_clinicos d ON d.id = t.documento_id WHERE d.paciente_id = ?`,
-      ),
+      ).map(descifrarTrazabilidad),
       consentimientos: de("SELECT * FROM consentimientos WHERE paciente_id = ?"),
       misAccesos: db
         .prepare(
@@ -154,7 +156,10 @@ rutasDerechos.get(
 rutasDerechos.get("/pacientes/:pacienteId/mis-datos/export", exigirAccesoAPaciente, (req, res) => {
   const formato = String(req.query.format ?? "json");
   const pacienteId = req.params.pacienteId;
-  if (formato === "json") return res.json(paqueteDatos(pacienteId));
+   if (formato === "json") {
+     auditar({ usuario: req.usuario, accion: "exportacion", recurso: `mis-datos/${pacienteId}/export`, req });
+     return res.json(paqueteDatos(pacienteId));
+   }
   if (formato !== "csv") return res.status(400).json({ error: "Formato soportado: json o csv." });
   const filas = db.prepare("SELECT id, paciente_id, dia_postoperatorio, fecha_registro, dolor_reportado, estado_herida, movilidad, necesidad_derivacion FROM seguimientos WHERE paciente_id = ?").all(pacienteId);
   const csv = ["id,paciente_id,dia_postoperatorio,fecha_registro,dolor_reportado,estado_herida,movilidad,necesidad_derivacion", ...filas.map((f) => Object.values(f).map(csvEscape).join(","))].join("\n");
@@ -168,9 +173,47 @@ rutasDerechos.patch("/pacientes/:pacienteId/mis-datos/:campo", exigirAccesoAPaci
   const motivo = String(req.body?.motivo ?? "").trim();
   if (!motivo) return res.status(400).json({ error: "El motivo es obligatorio." });
   const id = nuevoId("REC");
-  db.prepare("INSERT INTO solicitudes_rectificacion (id, paciente_id, campo, valor_solicitado, motivo) VALUES (?, ?, ?, ?, ?)").run(id, req.params.pacienteId, req.params.campo, String(req.body?.valorSolicitado ?? ""), motivo);
+  const valorSolicitado = String(req.body?.valorSolicitado ?? req.body?.valor_solicitado ?? "");
+  db.prepare("INSERT INTO solicitudes_rectificacion (id, paciente_id, campo, valor_solicitado, motivo) VALUES (?, ?, ?, ?, ?)").run(id, req.params.pacienteId, req.params.campo, cifrar(valorSolicitado), motivo);
   auditar({ usuario: req.usuario, accion: "escritura", recurso: `rectificaciones/${id}`, req });
   res.status(202).json({ solicitudId: id, estado: "pendiente_revision_profesional" });
+});
+
+rutasDerechos.get("/rectificaciones/pendientes", soloRoles("profesional"), (req, res) => {
+  const profesional = db.prepare("SELECT establecimiento_id FROM profesionales WHERE id = ? AND activo = 1").get(req.usuario.profesionalId);
+  if (!profesional) return res.status(403).json({ error: "Profesional no habilitado." });
+  const solicitudes = db.prepare(`SELECT r.id, r.paciente_id, r.campo, r.valor_solicitado, r.motivo, r.estado, r.creada_en,
+      p.nombre_ficticio, e.establecimiento_id
+    FROM solicitudes_rectificacion r
+    JOIN pacientes p ON p.id = r.paciente_id
+    JOIN eventos_quirurgicos e ON e.paciente_id = p.id
+    WHERE r.estado = 'pendiente' AND e.establecimiento_id = ?
+    ORDER BY r.creada_en`).all(profesional.establecimiento_id)
+    .map((fila) => ({ ...fila, nombre_ficticio: descifrar(fila.nombre_ficticio), valor_solicitado: descifrar(fila.valor_solicitado) }));
+  res.json({ rectificaciones: solicitudes });
+});
+
+rutasDerechos.post("/rectificaciones/:rectificacionId/revisar", soloRoles("profesional"), (req, res) => {
+  const solicitud = db.prepare(`SELECT r.*, e.establecimiento_id FROM solicitudes_rectificacion r
+    JOIN eventos_quirurgicos e ON e.paciente_id = r.paciente_id WHERE r.id = ?`).get(req.params.rectificacionId);
+  const profesional = db.prepare("SELECT establecimiento_id FROM profesionales WHERE id = ? AND activo = 1").get(req.usuario.profesionalId);
+  if (!solicitud) return res.status(404).json({ error: "Rectificación no encontrada." });
+  if (!profesional || profesional.establecimiento_id !== solicitud.establecimiento_id) return res.status(403).json({ error: "Rectificación fuera de tu establecimiento." });
+  if (solicitud.estado !== "pendiente") return res.status(409).json({ error: "La rectificación ya fue revisada." });
+  const decision = req.body?.decision ?? req.body?.accion ?? (req.body?.aplicar === true ? "aplicar" : "rechazar");
+  if (!["aplicar", "rechazar", "rechazada", "aprobada"].includes(decision)) return res.status(400).json({ error: "La decisión debe ser aplicar o rechazar." });
+  const aprobada = decision === "aplicar" || decision === "aprobada";
+  if (aprobada) {
+    const campos = ["nombre_ficticio", "comuna_ficticia", "region", "tipo_apoyo", "fragilidad", "riesgo_nutricional"];
+    if (!campos.includes(solicitud.campo)) return res.status(400).json({ error: "Campo no rectificable." });
+    const valor = descifrar(solicitud.valor_solicitado);
+    const almacenado = ["nombre_ficticio", "comuna_ficticia"].includes(solicitud.campo) ? cifrar(valor) : valor;
+    db.prepare(`UPDATE pacientes SET ${solicitud.campo} = ?, actualizado_en = datetime('now') WHERE id = ?`).run(almacenado, solicitud.paciente_id);
+  }
+  const estado = aprobada ? "aprobada" : "rechazada";
+  db.prepare("UPDATE solicitudes_rectificacion SET estado = ?, revisada_en = datetime('now'), revisada_por = ? WHERE id = ?").run(estado, req.usuario.id, solicitud.id);
+  auditar({ usuario: req.usuario, accion: "modificacion", recurso: `rectificaciones/${solicitud.id}`, campo: "estado", valorAnterior: "pendiente", valorNuevo: estado, req });
+  res.json({ ok: true, estado });
 });
 
 rutasDerechos.post("/pacientes/:pacienteId/oposiciones", exigirAccesoAPaciente, (req, res) => {
@@ -195,15 +238,18 @@ function supresion(req, res) {
   const anonimo = `ANON-${pacienteId}`;
   const procesar = db.transaction(() => {
     db.prepare("INSERT INTO solicitudes_arco (id, paciente_id, tipo, estado, detalle, procesada_en, procesada_por) VALUES (?, ?, 'supresion', 'procesada', ?, datetime('now'), ?)").run(solicitudId, pacienteId, "Datos anonimizados; auditoría conservada por obligación legal.", req.usuario.id);
-    db.prepare("UPDATE pacientes SET nombre_ficticio = ?, comuna_ficticia = 'ANONIMIZADA', region = 'ANONIMIZADA', tipo_apoyo = 'autonomo', fragilidad = 0, riesgo_nutricional = 'normal', consentimiento_activo = 0, actualizado_en = datetime('now') WHERE id = ?").run(anonimo, pacienteId);
+    db.prepare("UPDATE pacientes SET nombre_ficticio = ?, comuna_ficticia = ?, region = 'ANONIMIZADA', tipo_apoyo = 'autonomo', fragilidad = 0, riesgo_nutricional = 'normal', consentimiento_activo = 0, actualizado_en = datetime('now') WHERE id = ?").run(cifrar(anonimo), cifrar("ANONIMIZADA"), pacienteId);
     db.prepare("UPDATE seguimientos SET fuente_dato = 'ANONIMIZADO', orientacion_entregada = 0, recomendacion_urgencia = 0 WHERE paciente_id = ?").run(pacienteId);
-    db.prepare("UPDATE alertas SET descripcion = 'ALERTA ANONIMIZADA', accion_tomada = NULL WHERE paciente_id = ?").run(pacienteId);
+    db.prepare("UPDATE alertas SET descripcion = ?, accion_tomada = NULL WHERE paciente_id = ?").run(cifrar("ALERTA ANONIMIZADA"), pacienteId);
     db.prepare("UPDATE consentimientos SET formulario_hash = NULL, ip_address = NULL WHERE paciente_id = ?").run(pacienteId);
     const documentos = db.prepare("SELECT id, ruta_local FROM documentos_clinicos WHERE paciente_id = ?").all(pacienteId);
     for (const doc of documentos) {
+      for (const archivo of readdirSync(RUTA_UPLOADS).filter((nombre) => nombre.startsWith(`${doc.id}-`))) {
+        try { unlinkSync(`${RUTA_UPLOADS}/${archivo}`); } catch { /* archivo ya eliminado */ }
+      }
       if (doc.ruta_local) try { unlinkSync(doc.ruta_local); } catch { /* archivo ya eliminado */ }
       db.prepare("UPDATE documentos_clinicos SET nombre_original = 'DOCUMENTO_ANONIMIZADO', ruta_local = NULL, estado_proceso = 'error' WHERE id = ?").run(doc.id);
-      db.prepare("UPDATE trazabilidad_extraccion SET valor_estructurado = NULL, texto_original = 'ANONIMIZADO', conflicto_con_otro_doc = NULL WHERE documento_id = ?").run(doc.id);
+      db.prepare("UPDATE trazabilidad_extraccion SET valor_estructurado = NULL, texto_original = ?, conflicto_con_otro_doc = NULL WHERE documento_id = ?").run(cifrar("ANONIMIZADO"), doc.id);
     }
     db.prepare("DELETE FROM rag_fts WHERE chunk_id IN (SELECT id FROM rag_chunks WHERE paciente_id = ?)").run(pacienteId);
     db.prepare("DELETE FROM rag_chunks WHERE paciente_id = ?").run(pacienteId);
@@ -217,14 +263,36 @@ function paqueteDatos(pacienteId) {
   const de = (sql) => db.prepare(sql).all(pacienteId);
   return {
     generadoEn: new Date().toISOString(), base: "Ley 21.719, acceso y portabilidad",
-    paciente: db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId),
+    paciente: descifrarCampos(db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId), ["nombre_ficticio", "comuna_ficticia"]),
     eventosQuirurgicos: de("SELECT * FROM eventos_quirurgicos WHERE paciente_id = ?"),
-    indicaciones: db.prepare("SELECT i.* FROM indicaciones_alta i JOIN eventos_quirurgicos e ON e.id = i.evento_quirurgico_id WHERE e.paciente_id = ?").all(pacienteId),
+    indicaciones: db.prepare("SELECT i.* FROM indicaciones_alta i JOIN eventos_quirurgicos e ON e.id = i.evento_quirurgico_id WHERE e.paciente_id = ?").all(pacienteId).map(descifrarIndicacion),
     conciliacionFarmacologica: de("SELECT * FROM conciliacion_farmacologica WHERE paciente_id = ?"),
-    seguimientos: de("SELECT * FROM seguimientos WHERE paciente_id = ?"), alertas: de("SELECT * FROM alertas WHERE paciente_id = ?"),
+    seguimientos: de("SELECT * FROM seguimientos WHERE paciente_id = ?"), alertas: de("SELECT * FROM alertas WHERE paciente_id = ?").map(descifrarAlerta),
     documentos: de("SELECT * FROM documentos_clinicos WHERE paciente_id = ?"), consentimientos: de("SELECT * FROM consentimientos WHERE paciente_id = ?"),
     solicitudesArco: de("SELECT * FROM solicitudes_arco WHERE paciente_id = ?"), oposiciones: de("SELECT * FROM oposiciones_tratamiento WHERE paciente_id = ?"),
   };
 }
 
 function csvEscape(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+
+function descifrarIndicacion(indicacion) {
+  return {
+    ...indicacion,
+    medicamentos: descifrarJson(indicacion.medicamentos, []),
+    signos_alarma: descifrarJson(indicacion.signos_alarma, []),
+    dosis_indicada: descifrar(indicacion.dosis_indicada),
+    frecuencia_indicada: descifrar(indicacion.frecuencia_indicada),
+    duracion_indicada: descifrar(indicacion.duracion_indicada),
+    curacion_herida: descifrar(indicacion.curacion_herida),
+    restricciones_fisicas: descifrar(indicacion.restricciones_fisicas),
+    alimentacion: descifrar(indicacion.alimentacion),
+  };
+}
+
+function descifrarAlerta(alerta) {
+  return { ...alerta, descripcion: descifrar(alerta.descripcion), accion_tomada: descifrar(alerta.accion_tomada) };
+}
+
+function descifrarTrazabilidad(campo) {
+  return { ...campo, valor_estructurado: descifrar(campo.valor_estructurado), texto_original: descifrar(campo.texto_original) };
+}

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, nuevoId } from "../db.js";
 import { auditar } from "../auditoria.js";
 import { exigirAccesoAPaciente, pacientesVisibles, soloRoles } from "../auth.js";
+import { cifrar, cifrarJson, descifrar, descifrarJson } from "../seguridad.js";
 
 export const rutasCrud = Router();
 
@@ -60,7 +61,7 @@ rutasCrud.patch("/eventos/:eventoId", soloRoles("profesional"), (req, res) => {
 rutasCrud.get("/eventos/:eventoId/indicaciones", (req, res) => {
   const evento = db.prepare("SELECT * FROM eventos_quirurgicos WHERE id = ?").get(req.params.eventoId);
   if (!evento || !pacientesVisibles(req.usuario).includes(evento.paciente_id)) return res.status(403).json({ error: "No autorizado." });
-  res.json({ indicaciones: db.prepare("SELECT * FROM indicaciones_alta WHERE evento_quirurgico_id = ? ORDER BY fecha_indicacion DESC").all(evento.id) });
+  res.json({ indicaciones: db.prepare("SELECT * FROM indicaciones_alta WHERE evento_quirurgico_id = ? ORDER BY fecha_indicacion DESC").all(evento.id).map(descifrarIndicacion) });
 });
 
 rutasCrud.post("/eventos/:eventoId/indicaciones", soloRoles("profesional"), guardarIndicacion);
@@ -69,7 +70,10 @@ rutasCrud.patch("/indicaciones/:indicacionId", soloRoles("profesional"), (req, r
   if (!indicacion || !pacientesVisibles(req.usuario).includes(indicacion.paciente_id)) return res.status(403).json({ error: "No autorizado." });
   const fields = ["medicamentos", "dosis_indicada", "frecuencia_indicada", "duracion_indicada", "curacion_herida", "restricciones_fisicas", "alimentacion", "signos_alarma", "canal_contacto", "fecha_proximo_control"];
   for (const campo of fields) if (req.body?.[campo] !== undefined) {
-    db.prepare(`UPDATE indicaciones_alta SET ${campo} = ? WHERE id = ?`).run(typeof req.body[campo] === "object" ? JSON.stringify(req.body[campo]) : req.body[campo], indicacion.id);
+    const valor = ["medicamentos", "signos_alarma"].includes(campo)
+      ? cifrarJson(req.body[campo])
+      : cifrar(req.body[campo]);
+    db.prepare(`UPDATE indicaciones_alta SET ${campo} = ? WHERE id = ?`).run(valor, indicacion.id);
     auditar({ usuario: req.usuario, accion: "modificacion", recurso: `indicaciones/${indicacion.id}`, campo, valorAnterior: indicacion[campo], valorNuevo: req.body[campo], req });
   }
   res.json({ ok: true });
@@ -81,7 +85,21 @@ function guardarIndicacion(req, res) {
   const b = req.body ?? {};
   const id = nuevoId("IND");
   db.prepare(`INSERT INTO indicaciones_alta (id, evento_quirurgico_id, medicamentos, dosis_indicada, frecuencia_indicada, duracion_indicada, curacion_herida, restricciones_fisicas, alimentacion, signos_alarma, canal_contacto, fecha_proximo_control, fuente, profesional_indica_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, evento.id, JSON.stringify(b.medicamentos ?? []), b.dosisIndicada ?? null, b.frecuenciaIndicada ?? null, b.duracionIndicada ?? null, b.curacionHerida ?? null, b.restriccionesFisicas ?? null, b.alimentacion ?? null, JSON.stringify(b.signosAlarma ?? []), b.canalContacto ?? null, b.fechaProximoControl ?? null, b.fuente ?? "indicación profesional", req.usuario.profesionalId);
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, evento.id, cifrarJson(b.medicamentos ?? []), cifrar(b.dosisIndicada), cifrar(b.frecuenciaIndicada), cifrar(b.duracionIndicada), cifrar(b.curacionHerida), cifrar(b.restriccionesFisicas), cifrar(b.alimentacion), cifrarJson(b.signosAlarma ?? []), b.canalContacto ?? null, b.fechaProximoControl ?? null, b.fuente ?? "indicación profesional", req.usuario.profesionalId);
   auditar({ usuario: req.usuario, accion: "escritura", recurso: `indicaciones/${id}`, req });
   res.status(201).json({ indicacionId: id });
+}
+
+function descifrarIndicacion(indicacion) {
+  return {
+    ...indicacion,
+    medicamentos: descifrarJson(indicacion.medicamentos, []),
+    signos_alarma: descifrarJson(indicacion.signos_alarma, []),
+    dosis_indicada: descifrar(indicacion.dosis_indicada),
+    frecuencia_indicada: descifrar(indicacion.frecuencia_indicada),
+    duracion_indicada: descifrar(indicacion.duracion_indicada),
+    curacion_herida: descifrar(indicacion.curacion_herida),
+    restricciones_fisicas: descifrar(indicacion.restricciones_fisicas),
+    alimentacion: descifrar(indicacion.alimentacion),
+  };
 }

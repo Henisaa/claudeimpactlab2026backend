@@ -10,12 +10,13 @@
 
 import { Router } from "express";
 import multer from "multer";
-import { writeFileSync } from "node:fs";
+import { unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { db, nuevoId, RUTA_UPLOADS } from "../db.js";
 import { auditar } from "../auditoria.js";
 import { exigirAccesoAPaciente, exigirConsentimiento, pacientesVisibles } from "../auth.js";
 import { extraerDocumento, responderDesdeElBaul } from "../claude.js";
+import { cifrar, descifrar, descifrarCampos, descifrarJson, detectarPII, escribirArchivoCifrado } from "../seguridad.js";
 import { buscar, reindexarDocumento } from "../rag.js";
 import { matriz, huecosDeLaMatriz, diaRelativo, hitosProximos } from "../motor.js";
 
@@ -32,7 +33,7 @@ const TIPOS_IMAGEN = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 rutasBaul.get("/pacientes/:pacienteId/baul", exigirAccesoAPaciente, (req, res) => {
   const { pacienteId } = req.params;
-  const paciente = db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId);
+   const paciente = descifrarCampos(db.prepare("SELECT * FROM pacientes WHERE id = ?").get(pacienteId), ["nombre_ficticio", "comuna_ficticia"]);
   if (!paciente) return res.status(404).json({ error: "Paciente no encontrado." });
 
   const evento = db
@@ -43,10 +44,10 @@ rutasBaul.get("/pacientes/:pacienteId/baul", exigirAccesoAPaciente, (req, res) =
        WHERE e.paciente_id = ? ORDER BY e.fecha_alta DESC LIMIT 1`,
     )
     .get(pacienteId);
-  const indicaciones = evento
-    ? db
+   const indicaciones = evento
+     ? db
         .prepare("SELECT * FROM indicaciones_alta WHERE evento_quirurgico_id = ?")
-        .all(evento.id)
+         .all(evento.id).map(descifrarIndicacion)
     : [];
   const conciliacion = db
     .prepare("SELECT * FROM conciliacion_farmacologica WHERE paciente_id = ?")
@@ -56,23 +57,23 @@ rutasBaul.get("/pacientes/:pacienteId/baul", exigirAccesoAPaciente, (req, res) =
       "SELECT * FROM documentos_clinicos WHERE paciente_id = ? ORDER BY fecha_subida DESC",
     )
     .all(pacienteId);
-  const campos = db
+   const campos = db
     .prepare(
       `SELECT t.* FROM trazabilidad_extraccion t
        JOIN documentos_clinicos d ON d.id = t.documento_id
        WHERE d.paciente_id = ? ORDER BY t.fecha_extraccion DESC`,
     )
-    .all(pacienteId);
+     .all(pacienteId).map((c) => ({ ...c, valor_estructurado: descifrar(c.valor_estructurado), texto_original: descifrar(c.texto_original) }));
   const alertas = db
     .prepare(
       "SELECT * FROM alertas WHERE paciente_id = ? ORDER BY fecha_creacion DESC LIMIT 20",
     )
-    .all(pacienteId);
+     .all(pacienteId).map(descifrarAlerta);
   const seguimientos = db
     .prepare(
       "SELECT * FROM seguimientos WHERE paciente_id = ? ORDER BY fecha_registro DESC LIMIT 30",
     )
-    .all(pacienteId);
+       .all(pacienteId);
 
   const m = matriz();
   const dia = evento?.fecha_alta ? diaRelativo(evento.fecha_alta) : null;
@@ -102,9 +103,10 @@ rutasBaul.post(
   async (req, res, next) => {
     try {
       const { pacienteId } = req.params;
-      const archivos = req.files ?? [];
-      if (archivos.length === 0) {
-        return res.status(400).json({ error: "No se recibió ninguna imagen." });
+       const archivos = req.files ?? [];
+       const textoDocumento = String(req.body?.texto ?? "").trim();
+       if (archivos.length === 0 && !textoDocumento) {
+         return res.status(400).json({ error: "Se requiere texto o al menos una imagen." });
       }
       for (const a of archivos) {
         if (!TIPOS_IMAGEN.includes(a.mimetype)) {
@@ -114,22 +116,35 @@ rutasBaul.post(
         }
       }
 
-      const { borrador, uso } = await extraerDocumento(
-        archivos.map((a) => ({
+       if (detectarPII(textoDocumento).length > 0) {
+         const err = new Error("El texto del documento contiene datos personales no permitidos.");
+         err.status = 422;
+         throw err;
+       }
+       const { borrador, uso } = await extraerDocumento(
+         archivos.map((a) => ({
           mediaType: a.mimetype,
           base64: a.buffer.toString("base64"),
-        })),
-      );
+         })), textoDocumento,
+       );
+       if (detectarPII(JSON.stringify(borrador)).length > 0) {
+         const err = new Error("El borrador contiene datos personales no permitidos.");
+         err.status = 422;
+         throw err;
+       }
 
       const documentoId = nuevoId("DOC");
-      const nombre = archivos.map((a) => a.originalname).join(", ");
-      const rutaLocal = path.join(RUTA_UPLOADS, `${documentoId}-0${path.extname(archivos[0].originalname) || ".jpg"}`);
-      archivos.forEach((a, i) => {
-        writeFileSync(
-          path.join(RUTA_UPLOADS, `${documentoId}-${i}${path.extname(a.originalname) || ".jpg"}`),
-          a.buffer,
-        );
-      });
+       const nombre = archivos.map((a) => a.originalname).join(", ") || "documento_texto.txt";
+       const rutaLocal = archivos.length ? path.join(RUTA_UPLOADS, `${documentoId}-0${path.extname(archivos[0].originalname) || ".jpg"}`) : null;
+       archivos.forEach((a, i) => {
+         const temporal = path.join(RUTA_UPLOADS, `.tmp-${documentoId}-${i}`);
+         writeFileSync(temporal, a.buffer);
+         escribirArchivoCifrado(
+           temporal,
+           path.join(RUTA_UPLOADS, `${documentoId}-${i}${path.extname(a.originalname) || ".jpg"}`),
+         );
+         unlinkSync(temporal);
+       });
 
       const TIPO_DOC = {
         informe_alta: "informe_de_alta",
@@ -141,7 +156,7 @@ rutasBaul.post(
       };
       db.prepare(
         `INSERT INTO documentos_clinicos (id, paciente_id, nombre_original, tipo_documento, ruta_local, estado_proceso)
-         VALUES (?, ?, ?, ?, ?, 'procesado')`,
+          VALUES (?, ?, ?, ?, ?, 'borrador')`,
       ).run(documentoId, pacienteId, nombre, TIPO_DOC[borrador.tipo_documento] ?? "otro", rutaLocal);
 
       // Cada campo extraído queda como BORRADOR con su cita literal.
@@ -160,8 +175,8 @@ rutasBaul.post(
       for (const a of borrador.alergias ?? []) {
         campos.push(["alergia", a.valor, a.texto_original, a.confianza]);
       }
-      for (const [campo, valor, texto, confianza] of campos) {
-        insertarCampo.run(nuevoId("TRZ"), documentoId, campo, valor ?? null, texto ?? null, confianza ?? null);
+       for (const [campo, valor, texto, confianza] of campos) {
+         insertarCampo.run(nuevoId("TRZ"), documentoId, campo, valor === null || valor === undefined ? null : cifrar(valor), texto === null || texto === undefined ? null : cifrar(texto), confianza ?? null);
       }
 
       auditar({ usuario: req.usuario, accion: "escritura", recurso: `documentos/${documentoId}`, req });
@@ -185,9 +200,10 @@ rutasBaul.post("/documentos/:documentoId/confirmar", (req, res) => {
     return res.status(403).json({ error: "No tienes autorización sobre este paciente." });
   }
 
-  const campos = db
-    .prepare("SELECT * FROM trazabilidad_extraccion WHERE documento_id = ?")
-    .all(documento.id);
+   const campos = db
+     .prepare("SELECT * FROM trazabilidad_extraccion WHERE documento_id = ?")
+     .all(documento.id)
+     .map((campo) => ({ ...campo, valor_estructurado: descifrar(campo.valor_estructurado), texto_original: descifrar(campo.texto_original) }));
   const marcar = db.prepare(
     `UPDATE trazabilidad_extraccion
      SET confirmado = 1, confirmado_por = ?,
@@ -211,12 +227,13 @@ rutasBaul.post("/documentos/:documentoId/confirmar", (req, res) => {
   const texto = campos
     .map((c) => `${c.campo}: ${c.texto_original ?? c.valor_estructurado ?? ""}`)
     .join("\n\n");
-  reindexarDocumento(documento.id, {
+   reindexarDocumento(documento.id, {
     texto,
     tipo: "documento_paciente",
     fuente: `${documento.tipo_documento} (${documento.nombre_original})`,
-    pacienteId: documento.paciente_id,
-  });
+     pacienteId: documento.paciente_id,
+   });
+   db.prepare("UPDATE documentos_clinicos SET estado_proceso = 'procesado' WHERE id = ?").run(documento.id);
 
   res.json({ ok: true, camposConfirmados: campos.length });
 });
@@ -230,11 +247,14 @@ rutasBaul.post(
   async (req, res, next) => {
     try {
       const { pacienteId } = req.params;
-      const pregunta = String(req.body?.pregunta ?? "").trim();
+       const pregunta = String(req.body?.pregunta ?? "").trim();
       if (!pregunta) return res.status(400).json({ error: "Falta la pregunta." });
-      if (pregunta.length > 500) {
+       if (pregunta.length > 500) {
         return res.status(400).json({ error: "La pregunta es demasiado larga." });
-      }
+       }
+       if (detectarPII(pregunta).length > 0) {
+         return res.status(422).json({ error: "La pregunta contiene datos personales no permitidos." });
+       }
 
       const { delPaciente, oficiales } = buscar(pregunta, pacienteId);
       const fragmentos = [...delPaciente, ...oficiales];
@@ -287,4 +307,22 @@ function registrarOperacionIA(pacienteId, operacion) {
     `INSERT INTO registro_operacion (id, tratamiento_id, operacion, paciente_id, sistema_actor, base_consentimiento)
      VALUES (?, ?, ?, ?, 'backend_api', 1)`,
   ).run(nuevoId("OPE"), tratamiento.id, operacion, pacienteId);
+}
+
+function descifrarIndicacion(indicacion) {
+  return {
+    ...indicacion,
+    medicamentos: descifrarJson(indicacion.medicamentos, []),
+    signos_alarma: descifrarJson(indicacion.signos_alarma, []),
+    dosis_indicada: descifrar(indicacion.dosis_indicada),
+    frecuencia_indicada: descifrar(indicacion.frecuencia_indicada),
+    duracion_indicada: descifrar(indicacion.duracion_indicada),
+    curacion_herida: descifrar(indicacion.curacion_herida),
+    restricciones_fisicas: descifrar(indicacion.restricciones_fisicas),
+    alimentacion: descifrar(indicacion.alimentacion),
+  };
+}
+
+function descifrarAlerta(alerta) {
+  return { ...alerta, descripcion: descifrar(alerta.descripcion), accion_tomada: descifrar(alerta.accion_tomada) };
 }

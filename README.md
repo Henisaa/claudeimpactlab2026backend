@@ -5,9 +5,9 @@ Claude Impact Lab 2026, Línea 03. API REST que implementa el núcleo de
 consentimiento, auditoría, check-ins con motor determinístico, alertas y el
 RAG del baúl.
 
-Express + SQLite vía `node:sqlite` (incluido en Node ≥ 24: sin dependencias
-nativas que compilar). La base es `data/prototipo.db`, cuyo esquema de 17
-tablas ya seguía el modelo del backend idealizado.
+Express + SQLite vía `better-sqlite3` (Node ≥ 20). La base es
+`data/prototipo.db`; `src/schema.sql` crea el modelo completo y `db.js` aplica
+las migraciones idempotentes.
 
 ## Correr
 
@@ -92,10 +92,11 @@ procesamiento con IA.
 - El profesional permanece en el circuito: ninguna alerta se cierra sin
   acción documentada.
 
-## Pendiente
+## Verificación
 
-- Encriptación a nivel de aplicación de campos sensibles (§6 del idealizado).
-- Notificaciones reales de escalamiento (SMS/WhatsApp) y reglas de reintento.
-- Derecho de supresión con excepciones legales (§8.3).
-- `node_modules/` está versionado por error en git; conviene
-  `git rm -r --cached node_modules` en un commit de limpieza.
+`npm test` ejecuta la suite reproducible de `test/backend.test.js` y
+`npm run evaluar` genera las métricas de los ocho casos sintéticos en modo
+MOCK. Los campos sensibles y los archivos clínicos se cifran con AES-256-GCM;
+la clave debe venir de `ENCRYPTION_KEY` fuera del modo demo. Las limitaciones
+clínicas y las reglas aún bloqueadas están documentadas en
+`../claudeimpactlab2026obsidian/Backend_Correcciones_Implementadas.md`.

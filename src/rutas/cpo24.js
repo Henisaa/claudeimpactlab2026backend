@@ -13,8 +13,8 @@ rutasCpo24.post("/pacientes/:pacienteId/cpo24/intentos", soloRoles("profesional"
   const respondio = req.body?.respondio === true ? 1 : 0;
   const id = nuevoId("CPO");
   db.prepare("INSERT INTO cpo24_intentos (id, paciente_id, numero, respondio, canal, registrado_por, observacion) VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, pacienteId, numero, respondio, req.body?.canal ?? "telefonico", req.usuario.id, req.body?.observacion ?? null);
-  if (!respondio && numero >= 3) encolar(pacienteId, "cuidador", "CPO24_SIN_RESPUESTA");
-  if (!respondio && numero >= 5) encolar(pacienteId, "establecimiento", "CPO24_ESCALAMIENTO_ESTABLECIMIENTO");
+  if (!respondio && numero === 3) encolar(pacienteId, "cuidador", "CPO24_SIN_RESPUESTA");
+  if (!respondio && numero === 5) encolar(pacienteId, "establecimiento", "CPO24_ESCALAMIENTO_ESTABLECIMIENTO");
   auditar({ usuario: req.usuario, accion: "escritura", recurso: `cpo24/${pacienteId}/${numero}`, req });
   res.status(201).json({ intentoId: id, numero, escalado: !respondio && numero >= 3 });
 });
@@ -24,11 +24,11 @@ rutasCpo24.get("/pacientes/:pacienteId/cpo24", (req, res) => {
   res.json({ intentos: db.prepare("SELECT * FROM cpo24_intentos WHERE paciente_id = ? ORDER BY numero").all(req.params.pacienteId) });
 });
 
-export function encolar(pacienteId, destinatarioTipo, evento) {
+export function encolar(pacienteId, destinatarioTipo, evento, payloadExtra = {}) {
   const paciente = db.prepare("SELECT id FROM pacientes WHERE id = ?").get(pacienteId);
   if (!paciente) return null;
   const id = nuevoId("NOT");
-  db.prepare("INSERT INTO notificaciones_outbox (id, paciente_id, destinatario_tipo, canal, evento, payload) VALUES (?, ?, ?, 'app', ?, ?)").run(id, pacienteId, destinatarioTipo, evento, JSON.stringify({ pacienteId, evento }));
+  db.prepare("INSERT INTO notificaciones_outbox (id, paciente_id, destinatario_tipo, canal, evento, payload) VALUES (?, ?, ?, 'app', ?, ?)").run(id, pacienteId, destinatarioTipo, evento, JSON.stringify({ pacienteId, evento, ...payloadExtra }));
   return id;
 }
 

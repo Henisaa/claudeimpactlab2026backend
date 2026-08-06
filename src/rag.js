@@ -12,6 +12,7 @@
  */
 
 import { db, nuevoId } from "./db.js";
+import { cifrar, descifrar } from "./seguridad.js";
 
 const insertarChunk = db.prepare(`
   INSERT INTO rag_chunks (id, paciente_id, documento_id, tipo, fuente, url_fuente, seccion, contenido)
@@ -60,7 +61,10 @@ export function indexar({
   const ids = [];
   for (const contenido of trocear(texto)) {
     const id = nuevoId("CHK");
-    insertarChunk.run(id, pacienteId, documentoId, tipo, fuente, urlFuente, seccion, contenido);
+    const almacenado = tipo === "documento_paciente" ? cifrar(contenido) : contenido;
+    insertarChunk.run(id, pacienteId, documentoId, tipo, fuente, urlFuente, seccion, almacenado);
+    // FTS necesita texto legible para recuperar; el contenido clínico de la tabla
+    // sigue cifrado y el fragmento se descifra solo al construir la respuesta.
     insertarFts.run(id, contenido);
     ids.push(id);
   }
@@ -117,8 +121,9 @@ export function buscar(pregunta, pacienteId, topK = 6) {
     )
     .all(consulta, pacienteId);
 
+  const descifrarFila = (f) => f.tipo === "documento_paciente" ? { ...f, contenido: descifrar(f.contenido) } : f;
   return {
-    delPaciente: filas.filter((f) => f.paciente_id === pacienteId).slice(0, topK),
+    delPaciente: filas.filter((f) => f.paciente_id === pacienteId).slice(0, topK).map(descifrarFila),
     oficiales: filas.filter((f) => f.paciente_id === null).slice(0, topK),
   };
 }

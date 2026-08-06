@@ -133,9 +133,10 @@ const ESQUEMA_EXTRACCION = {
  * @param imagenes  [{ mediaType, base64 }]
  * @returns { borrador, uso }
  */
-export async function extraerDocumento(imagenes) {
+export async function extraerDocumento(imagenes, textoDocumento = "") {
+  const textoSeguro = anonimizar(textoDocumento);
   if (process.env.CLAUDE_MOCK !== "false" || !process.env.ANTHROPIC_API_KEY) {
-    return { borrador: mockExtraccion(), uso: { tokensEntrada: 0, tokensSalida: 0, mock: true } };
+    return { borrador: mockExtraccion(textoDocumento, textoSeguro), uso: { tokensEntrada: 0, tokensSalida: 0, mock: true } };
   }
   const respuesta = await anthropic().messages.create({
     model: MODELO_VISION,
@@ -146,6 +147,7 @@ export async function extraerDocumento(imagenes) {
       {
         role: "user",
         content: [
+          ...(textoSeguro ? [{ type: "text", text: `Texto del documento (anonimizado):\n${textoSeguro}` }] : []),
           ...imagenes.map((img) => ({
             type: "image",
             source: { type: "base64", media_type: img.mediaType, data: img.base64 },
@@ -231,11 +233,14 @@ const ESQUEMA_RAG = {
 };
 
 export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
+  const preguntaSegura = anonimizar(pregunta);
+  const fragmentosSeguros = fragmentos.map((f) => ({ ...f, contenido: anonimizar(f.contenido) }));
+  const contextoSeguro = anonimizar(contexto);
   if (process.env.CLAUDE_MOCK !== "false" || !process.env.ANTHROPIC_API_KEY) {
-    const primero = fragmentos[0];
+    const primero = fragmentosSeguros[0];
     return {
       respuesta: primero
-        ? `${anonimizar(primero.contenido).slice(0, 500)} [1]`
+        ? `${primero.contenido.slice(0, 500)} [1]`
         : "Sus documentos y las guías disponibles no responden esta pregunta.",
       fragmentos_citados: primero ? [1] : [],
       informacion_insuficiente: !primero,
@@ -243,7 +248,7 @@ export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
       uso: { tokensEntrada: 0, tokensSalida: 0, mock: true },
     };
   }
-  const listado = fragmentos
+  const listado = fragmentosSeguros
     .map(
       (f, i) =>
         `[${i + 1}] (${f.tipo === "documento_paciente" ? "documento del paciente" : "fuente oficial"} — ${f.fuente}${f.seccion ? `, ${f.seccion}` : ""})\n${f.contenido}`,
@@ -258,13 +263,13 @@ export async function responderDesdeElBaul(pregunta, fragmentos, contexto) {
     messages: [
       {
         role: "user",
-        content: `Contexto del paciente (sintético): ${contexto}
+         content: `Contexto del paciente (sintético): ${contextoSeguro}
 
 Fragmentos recuperados del baúl:
 
 ${listado || "(la búsqueda no recuperó ningún fragmento)"}
 
-Pregunta: ${pregunta}`,
+Pregunta: ${preguntaSegura}`,
       },
     ],
   });
@@ -289,15 +294,38 @@ Pregunta: ${pregunta}`,
   };
 }
 
-function mockExtraccion() {
+function mockExtraccion(texto = "", textoSeguro = "") {
+  const fecha = texto.match(/\b(20\d{2}-\d{2}-\d{2}|\d{2}[/-]\d{2}[/-]20\d{2})\b/);
+  const normalizarFecha = (valor) => {
+    if (!valor) return null;
+    if (/^\d{2}[/-]/.test(valor)) {
+      const [d, m, y] = valor.split(/[/-]/);
+      return `${y}-${m}-${d}`;
+    }
+    return valor;
+  };
+  const medicamentos = [];
+  for (const nombre of ["Paracetamol", "Rivaroxabán", "Rivaroxaban", "Aspirina", "Losartán", "Losartan"]) {
+    const encontrado = texto.match(new RegExp(`${nombre}[^\\n.;]*`, "i"));
+    if (!encontrado) continue;
+    const linea = encontrado[0].trim();
+    medicamentos.push({
+      nombre: linea.match(new RegExp(nombre, "i"))[0],
+      dosis: linea.match(/\b\d+(?:[.,]\d+)?\s*(?:mg|g|mcg)\b/i)?.[0] ?? null,
+      frecuencia: linea.match(/cada\s+[^,;.]+/i)?.[0] ?? null,
+      duracion: linea.match(/por\s+[^,;.]+/i)?.[0] ?? null,
+      texto_original: linea,
+      confianza: "alta",
+    });
+  }
   return {
     tipo_documento: "informe_alta",
-    fecha_alta: null,
-    medicamentos: [],
+    fecha_alta: fecha ? { valor: normalizarFecha(fecha[0]), texto_original: fecha[0], confianza: "alta" } : null,
+    medicamentos,
     indicaciones_curacion: null,
     proximo_control: null,
     alergias: [],
-    datos_faltantes: ["Extracción MOCK: no se interpreta el contenido visual."],
+    datos_faltantes: [textoSeguro ? "Extracción MOCK basada en texto; confirmar contra el documento original." : "Extracción MOCK: no se interpreta el contenido visual."],
     conflictos: [],
     advertencias: ["Resultado simulado; confirmar contra el documento original."],
   };
