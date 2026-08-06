@@ -35,6 +35,7 @@ for (const tabla of [
   "notificaciones_outbox", "cpo24_intentos", "solicitudes_rectificacion", "oposiciones_tratamiento", "solicitudes_arco",
   "auditoria_acceso", "consentimientos", "trazabilidad_extraccion",
   "documentos_clinicos", "alertas", "hitos_seguimiento", "seguimientos",
+  "visitas_domiciliarias",
   "verificaciones_medicacion", "evidencias_medicacion", "tomas_programadas", "planes_medicacion",
   "conciliacion_farmacologica", "indicaciones_alta", "eventos_quirurgicos",
   "usuarios", "cuidadores", "profesionales", "pacientes",
@@ -174,6 +175,13 @@ for (const c of CASOS) {
 }
 insCons.run(nuevoId("CON"), "SYN-ETC-0001", "compartir_cuidador");
 insCons.run(nuevoId("CON"), "SYN-ETC-0007", "compartir_cuidador");
+
+// --- Visitas domiciliarias de la enfermera particular ------------------------
+// Una visita ya agendada para que la agenda no arranque vacía en la demo.
+const enDias = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+db.prepare(
+  "INSERT INTO visitas_domiciliarias (id, paciente_id, profesional_id, fecha, hora, motivo) VALUES (?, ?, 'PRO-0001', ?, ?, ?)",
+).run(nuevoId("VIS"), "SYN-ETC-0001", enDias(2), "11:00", "Control de herida y revisión de la marcha");
 
 db.prepare(
   `INSERT INTO inventario_tratamiento (id, finalidad, base_legal, categorias_datos, destinatarios, plazo_conservacion)

@@ -128,6 +128,22 @@ if (!columnasCuidadores.includes("telefono_contacto")) {
   db.exec("ALTER TABLE cuidadores ADD COLUMN telefono_contacto TEXT");
 }
 
+// Visitas domiciliarias de la enfermera particular: fecha fijada por la
+// profesional, visible para el paciente y su persona de apoyo.
+db.exec(`
+CREATE TABLE IF NOT EXISTS visitas_domiciliarias (
+  id             TEXT PRIMARY KEY,
+  paciente_id    TEXT NOT NULL REFERENCES pacientes(id),
+  profesional_id TEXT REFERENCES profesionales(id),
+  fecha          TEXT NOT NULL,
+  hora           TEXT NOT NULL,
+  motivo         TEXT,
+  estado         TEXT NOT NULL DEFAULT 'programada' CHECK (estado IN ('programada','realizada','cancelada')),
+  creada_en      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_visitas_paciente ON visitas_domiciliarias(paciente_id, fecha);
+`);
+
 const columnasTraz = db
   .prepare("SELECT name FROM pragma_table_info('trazabilidad_extraccion')")
   .all()

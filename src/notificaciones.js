@@ -89,6 +89,13 @@ const PLANTILLAS = {
       );
     },
   },
+  VISITA_AGENDADA: {
+    plantilla: "contigo_apoyo_visita",
+    texto: (n, p) =>
+      `Contigo · la enfermera agendó una visita a domicilio para ${n.toLowerCase()} ` +
+      `el ${p?.fecha ?? "(fecha por confirmar)"} a las ${p?.hora ?? ""}. ` +
+      `Ver en la app: ${ENLACE_APP}/paciente`,
+  },
   MEDICACION_NO_TOMADA: {
     plantilla: "contigo_apoyo_medicacion",
     texto: (n, p) =>
