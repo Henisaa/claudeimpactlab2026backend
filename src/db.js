@@ -9,11 +9,44 @@
  *    al baúl sin que una persona lo haya revisado.
  */
 
-import Database from "better-sqlite3";
 import { mkdirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// better-sqlite3 trae un binario nativo que no siempre coincide con el Node
+// de cada máquina del equipo (p. ej. Node 24 en Windows). Si no carga, se usa
+// node:sqlite integrado con un adaptador que expone la misma API que usa el
+// resto del backend (prepare/exec/pragma/transaction/close).
+const require = createRequire(import.meta.url);
+
+function abrirBase(ruta) {
+  try {
+    const Database = require("better-sqlite3");
+    return new Database(ruta);
+  } catch {
+    const { DatabaseSync } = require("node:sqlite");
+    const base = new DatabaseSync(ruta);
+    return {
+      prepare: (sql) => base.prepare(sql),
+      exec: (sql) => base.exec(sql),
+      pragma: (orden) => base.exec(`PRAGMA ${orden}`),
+      close: () => base.close(),
+      transaction: (fn) => (...args) => {
+        base.exec("BEGIN");
+        try {
+          const resultado = fn(...args);
+          base.exec("COMMIT");
+          return resultado;
+        } catch (error) {
+          base.exec("ROLLBACK");
+          throw error;
+        }
+      },
+    };
+  }
+}
 
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const RUTA_DATA = path.join(RAIZ, "data");
@@ -25,7 +58,7 @@ const rutaDb = process.env.DB_PATH
   ? path.resolve(process.env.DB_PATH)
   : path.join(RUTA_DATA, "prototipo.db");
 mkdirSync(path.dirname(rutaDb), { recursive: true });
-export const db = new Database(rutaDb);
+export const db = abrirBase(rutaDb);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 

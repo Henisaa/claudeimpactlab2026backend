@@ -13,6 +13,7 @@ import cors from "cors";
 import http from "node:http";
 import https from "node:https";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { login, autenticar } from "./auth.js";
 import { auditarLecturas } from "./auditoria.js";
 import { rutasBaul } from "./rutas/baul.js";
@@ -80,4 +81,4 @@ export function iniciarServidor() {
   });
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) iniciarServidor();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) iniciarServidor();
