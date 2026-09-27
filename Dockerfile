@@ -30,7 +30,11 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/data ./data
 COPY package.json ./
 
-RUN mkdir -p uploads
+# La imagen final solo ejecuta `node`: se quita el npm/corepack que trae la imagen
+# base (sus dependencias internas acumulan CVE altas que no usamos) y se corre
+# como usuario sin privilegios.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack  && mkdir -p uploads  && chown -R node:node /app
+USER node
 
 EXPOSE 4000
 
