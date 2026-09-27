@@ -3,3 +3,4 @@ node_modules/
 uploads/
 data/*.db-shm
 data/*.db-wal
+data/*.db
