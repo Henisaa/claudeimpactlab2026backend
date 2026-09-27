@@ -1,6 +1,6 @@
 # Backend ETC (Express + SQLite + Claude) — imagen para docker compose
 # Etapa de construcción: compila better-sqlite3 (binario nativo).
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 RUN apk add --no-cache python3 make g++
 
@@ -13,7 +13,7 @@ COPY src ./src
 COPY data ./data
 
 # Etapa de ejecución: solo lo necesario para correr la API.
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 
 WORKDIR /app
 
