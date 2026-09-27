@@ -13,6 +13,9 @@ permissions:
 jobs:
   codeql:
     name: CodeQL (análisis estático)
+    # CodeQL en repos privados exige GitHub Advanced Security (plan de pago).
+    # Solo corre si el repositorio es público.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
